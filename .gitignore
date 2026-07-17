@@ -1,0 +1,44 @@
+# IntelliJ / VS Code
+.idea/
+.vscode/
+*.iml
+
+# Backend - Spring Boot
+backend/.gradle/
+backend/build/
+backend/out/
+backend/src/main/resources/application-secret.yml
+backend/src/main/resources/application-local.yml
+
+# React Admin
+web-admin/node_modules/
+web-admin/dist/
+web-admin/.env
+web-admin/.env.local
+
+# Flutter
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/android/.gradle/
+mobile/.idea/
+
+# Python AI Server
+ai-server/.venv/
+ai-server/__pycache__/
+ai-server/**/*.pyc
+ai-server/.pytest_cache/
+ai-server/.env
+
+# Environment files
+.env
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
