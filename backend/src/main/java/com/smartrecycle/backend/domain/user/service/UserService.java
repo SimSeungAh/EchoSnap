@@ -31,7 +31,7 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse  updateSetting(Long userId, UpdateUserSettingsRequest request){
+    public UserResponse  updateSettings(Long userId, UpdateUserSettingsRequest request){
         User user = getUser(userId);
         user.updateSettings(request.notificationEnabled(), request.locationEnabled());
         return UserResponse.from(user);
