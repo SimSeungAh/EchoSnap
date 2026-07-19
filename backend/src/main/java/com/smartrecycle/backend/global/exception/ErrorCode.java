@@ -109,6 +109,33 @@ public enum ErrorCode {
           HttpStatus.BAD_REQUEST,
           "APARTMENT_004",
           "승인된 아파트만 선택할 수 있습니다."
+  ),
+
+  /*
+   * 폐기물 품목 및 분리배출 가이드
+   */
+  WASTE_ITEM_NOT_FOUND(
+          HttpStatus.NOT_FOUND,
+          "WASTE_001",
+          "폐기물 품목을 찾을 수 없습니다."
+  ),
+
+  WASTE_ITEM_ALREADY_EXISTS(
+          HttpStatus.CONFLICT,
+          "WASTE_002",
+          "같은 카테고리에 이미 등록된 폐기물 품목입니다."
+  ),
+
+  WASTE_CATEGORY_NOT_FOUND(
+          HttpStatus.NOT_FOUND,
+          "WASTE_003",
+          "폐기물 카테고리를 찾을 수 없습니다."
+  ),
+
+  WASTE_CATEGORY_ALREADY_EXISTS(
+          HttpStatus.CONFLICT,
+          "WASTE_004",
+          "이미 등록된 폐기물 카테고리 코드입니다."
   );
 
   private final HttpStatus status;
