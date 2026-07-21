@@ -1,5 +1,7 @@
 package com.smartrecycle.backend.domain.waste.service;
 
+import com.smartrecycle.backend.domain.schedule.dto.response.WasteItemScheduleResponse;
+import com.smartrecycle.backend.domain.schedule.service.RecycleScheduleQueryService;
 import com.smartrecycle.backend.domain.waste.dto.response.WasteCategoryResponse;
 import com.smartrecycle.backend.domain.waste.dto.response.WasteItemDetailResponse;
 import com.smartrecycle.backend.domain.waste.dto.response.WasteItemSummaryResponse;
@@ -30,12 +32,18 @@ public class WasteQueryService {
     private final WasteCategoryRepository wasteCategoryRepository;
     private final WasteItemRepository wasteItemRepository;
     private final RecycleGuideRepository recycleGuideRepository;
+
     private final RecycleGuideCheckItemRepository
             recycleGuideCheckItemRepository;
 
+    private final RecycleScheduleQueryService
+            recycleScheduleQueryService;
+
     /**
-     * 일반 사용자에게 노출할 활성 카테고리 목록을 조회
-     * sortOrder가 작은 카테고리부터 반환하고, sortOrder가 같으면 이름순으로 정렬
+     * 일반 사용자에게 노출할 활성 카테고리 목록을 조회합니다.
+     *
+     * sortOrder가 작은 카테고리부터 반환하고,
+     * sortOrder가 같으면 이름순으로 정렬합니다.
      */
     public List<WasteCategoryResponse> getCategories() {
         return wasteCategoryRepository
@@ -46,10 +54,12 @@ public class WasteQueryService {
     }
 
     /**
-     * 일반 사용자용 폐기물 품목 목록을 검색
+     * 일반 사용자용 폐기물 품목 목록을 검색합니다.
+     *
      * keyword:
      * - 품목명과 추가 검색 키워드에서 검색
      * - null 또는 공백이면 전체 품목 조회
+     *
      * categoryId:
      * - null이면 전체 카테고리 조회
      * - 값이 있으면 해당 활성 카테고리의 품목만 조회
@@ -77,21 +87,32 @@ public class WasteQueryService {
     }
 
     /**
-     * 일반 사용자용 폐기물 품목 상세 정보를 조회
+     * 일반 사용자용 폐기물 품목 상세 정보를 조회합니다.
+     *
      * 반환 정보:
      * - 품목 기본 정보
      * - 소속 카테고리
      * - 분리배출 가이드
      * - 체크리스트
-     * 품목에 가이드가 아직 등록되지 않은 경우 guide는 null로 반환
+     * - 로그인 사용자의 아파트 배출 일정
+     * - 오늘 배출 가능 여부
+     * - 현재 배출 가능 여부
+     * - 다음 배출일
+     *
+     * 품목에 가이드가 아직 등록되지 않은 경우
+     * guide는 null로 반환합니다.
      */
     public WasteItemDetailResponse getItemDetail(
+            Long userId,
             Long wasteItemId
     ) {
-        WasteItem wasteItem = getActiveWasteItem(wasteItemId);
+        WasteItem wasteItem =
+                getActiveWasteItem(wasteItemId);
 
-        /**
-         * 품목 자체가 활성화되어 있어도 상위 카테고리가 비활성화되어 있다면 일반 사용자에게 노출하지 않음
+        /*
+         * 품목 자체가 활성화되어 있어도
+         * 상위 카테고리가 비활성화되어 있다면
+         * 일반 사용자에게 노출하지 않습니다.
          */
         if (!wasteItem.getCategory().isActive()) {
             throw new CustomException(
@@ -107,15 +128,30 @@ public class WasteQueryService {
         List<RecycleGuideCheckItem> checkItems =
                 getCheckItems(recycleGuide);
 
+        /*
+         * 로그인 사용자가 설정한 거주 아파트를 기준으로
+         * 해당 품목의 공식 배출 일정을 계산합니다.
+         *
+         * 사용자가 아직 아파트를 설정하지 않았다면
+         * USER_APARTMENT_NOT_SET 오류가 발생합니다.
+         */
+        WasteItemScheduleResponse schedule =
+                recycleScheduleQueryService
+                        .getMyWasteItemSchedule(
+                                userId,
+                                wasteItemId
+                        );
+
         return WasteItemDetailResponse.from(
                 wasteItem,
                 recycleGuide,
-                checkItems
+                checkItems,
+                schedule
         );
     }
 
     /**
-     * 활성화된 폐기물 카테고리를 조회
+     * 활성화된 폐기물 카테고리를 조회합니다.
      */
     private WasteCategory getActiveCategory(
             Long categoryId
@@ -130,7 +166,7 @@ public class WasteQueryService {
     }
 
     /**
-     * 활성화된 폐기물 품목을 조회
+     * 활성화된 폐기물 품목을 조회합니다.
      */
     private WasteItem getActiveWasteItem(
             Long wasteItemId
@@ -145,7 +181,8 @@ public class WasteQueryService {
     }
 
     /**
-     * 가이드가 존재하면 체크리스트를 표시 순서대로 조회하고, 가이드가 없으면 빈 목록을 반환
+     * 가이드가 존재하면 체크리스트를 표시 순서대로 조회하고,
+     * 가이드가 없으면 빈 목록을 반환합니다.
      */
     private List<RecycleGuideCheckItem> getCheckItems(
             RecycleGuide recycleGuide
@@ -161,8 +198,10 @@ public class WasteQueryService {
     }
 
     /**
-     * 검색어의 앞뒤 공백을 제거
-     * null 또는 공백만 입력된 경우 Repository 검색 조건에 맞춰 빈 문자열을 반환
+     * 검색어의 앞뒤 공백을 제거합니다.
+     *
+     * null 또는 공백만 입력된 경우
+     * Repository 검색 조건에 맞춰 빈 문자열을 반환합니다.
      */
     private String normalizeKeyword(
             String keyword

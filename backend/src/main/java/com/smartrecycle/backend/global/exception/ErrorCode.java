@@ -57,6 +57,12 @@ public enum ErrorCode {
           "비밀번호가 일치하지 않습니다."
   ),
 
+  USER_APARTMENT_NOT_SET(
+          HttpStatus.BAD_REQUEST,
+          "USER_004",
+          "거주 아파트가 설정되지 않았습니다."
+  ),
+
   /*
    * 토큰
    */
@@ -136,6 +142,33 @@ public enum ErrorCode {
           HttpStatus.CONFLICT,
           "WASTE_004",
           "이미 등록된 폐기물 카테고리 코드입니다."
+  ),
+
+  /*
+   * 아파트별 배출 일정
+   */
+  RECYCLE_SCHEDULE_NOT_FOUND(
+          HttpStatus.NOT_FOUND,
+          "SCHEDULE_001",
+          "배출 일정을 찾을 수 없습니다."
+  ),
+
+  RECYCLE_SCHEDULE_ALREADY_EXISTS(
+          HttpStatus.CONFLICT,
+          "SCHEDULE_002",
+          "동일한 아파트와 품목에 중복된 배출 일정이 존재합니다."
+  ),
+
+  INVALID_RECYCLE_SCHEDULE(
+          HttpStatus.BAD_REQUEST,
+          "SCHEDULE_003",
+          "배출 일정 정보가 올바르지 않습니다."
+  ),
+
+  INVALID_RECYCLE_SCHEDULE_TIME(
+          HttpStatus.BAD_REQUEST,
+          "SCHEDULE_004",
+          "배출 종료 시간은 시작 시간보다 늦어야 합니다."
   );
 
   private final HttpStatus status;

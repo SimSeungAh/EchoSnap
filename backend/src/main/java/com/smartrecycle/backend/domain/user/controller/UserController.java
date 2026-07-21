@@ -1,6 +1,7 @@
 package com.smartrecycle.backend.domain.user.controller;
 
 import com.smartrecycle.backend.domain.user.dto.request.UpdateOnboardingRequest;
+import com.smartrecycle.backend.domain.user.dto.request.UpdateUserApartmentRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserSettingsRequest;
 import com.smartrecycle.backend.domain.user.dto.response.UserResponse;
@@ -100,6 +101,26 @@ public class UserController {
 
     return ApiResponse.success(
             "초기 설정 상태가 변경되었습니다.",
+            response
+    );
+  }
+
+  @PatchMapping("/me/apartment")
+  @Operation(
+          summary = "거주 아파트 설정",
+          description = "현재 로그인한 사용자의 거주 아파트를 설정하거나 변경합니다."
+  )
+  public ApiResponse<UserResponse> updateApartment(
+          @AuthenticationPrincipal CustomUserDetails userDetails,
+          @Valid @RequestBody UpdateUserApartmentRequest request
+  ) {
+    UserResponse response = userService.updateApartment(
+            userDetails.getUserId(),
+            request
+    );
+
+    return ApiResponse.success(
+            "거주 아파트가 변경되었습니다.",
             response
     );
   }
