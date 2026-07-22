@@ -6,6 +6,7 @@ import com.smartrecycle.backend.domain.waste.dto.response.WasteItemSummaryRespon
 import com.smartrecycle.backend.domain.waste.service.WasteQueryService;
 import com.smartrecycle.backend.global.response.ApiResponse;
 import com.smartrecycle.backend.global.response.PageResponse;
+import com.smartrecycle.backend.global.security.service.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,7 +35,7 @@ public class WasteController {
     private final WasteQueryService wasteQueryService;
 
     /**
-     * 일반 사용자에게 노출되는 활성 폐기물 카테고리 목록을 조회
+     * 일반 사용자에게 노출되는 활성 폐기물 카테고리 목록을 조회합니다.
      */
     @GetMapping("/categories")
     @Operation(
@@ -56,8 +58,9 @@ public class WasteController {
     }
 
     /**
-     * 폐기물 품목을 이름 또는 추가 키워드로 검색
-     * categoryId가 있으면 해당 카테고리의 품목만 조회
+     * 폐기물 품목을 이름 또는 추가 키워드로 검색합니다.
+     *
+     * categoryId가 있으면 해당 카테고리의 품목만 조회합니다.
      */
     @GetMapping("/items")
     @Operation(
@@ -101,15 +104,20 @@ public class WasteController {
     }
 
     /**
-     * 폐기물 품목의 기본 정보와 분리배출 가이드, 체크리스트를 조회
+     * 폐기물 품목의 기본 정보와 분리배출 가이드,
+     * 체크리스트 및 로그인 사용자의 아파트 일정을 조회합니다.
      */
     @GetMapping("/items/{wasteItemId}")
     @Operation(
-            summary = "폐기물 품목 상세 및 가이드 조회",
+            summary = "폐기물 품목 상세·가이드·일정 조회",
             description = """
                     폐기물 품목의 기본 정보와 카테고리,
                     분리배출 방법, 주의 사항,
                     체크리스트를 조회합니다.
+
+                    로그인 사용자가 설정한 거주 아파트를 기준으로
+                    오늘 배출 가능 여부와 다음 배출 일정도
+                    함께 반환합니다.
 
                     가이드가 등록되지 않은 품목은
                     guide가 null로 반환됩니다.
@@ -118,11 +126,15 @@ public class WasteController {
     public ApiResponse<WasteItemDetailResponse>
     getItemDetail(
 
+            @AuthenticationPrincipal
+            CustomUserDetails userDetails,
+
             @PathVariable
             Long wasteItemId
     ) {
         WasteItemDetailResponse response =
                 wasteQueryService.getItemDetail(
+                        userDetails.getUserId(),
                         wasteItemId
                 );
 
