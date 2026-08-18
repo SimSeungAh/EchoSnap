@@ -1,26 +1,32 @@
 package com.smartrecycle.backend.domain.residence.entity;
 
+import com.smartrecycle.backend.domain.collectionarea.entity.CollectionArea;
+import com.smartrecycle.backend.domain.collectionarea.entity.CollectionWasteType;
 import com.smartrecycle.backend.global.entity.BaseEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * 주소 기반 지역 수거 일정을 사용하는
  * 일반주택 사용자의 거주지 정보입니다.
  *
- * 도로명/지번 주소와 행정구역 코드, 좌표를 저장하며
- * 이후 CollectionArea와 연결하여
- * 실제 지자체/수거구역 배출 일정을 적용합니다.
+ * 주소와 행정구역 정보를 보관하고,
+ * 폐기물 종류별 CollectionArea 적용 관계를 관리합니다.
  */
 @Getter
 @Entity
@@ -44,12 +50,6 @@ public class Residence extends BaseEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  /**
-   * 주소 검색 API에서 반환된 대표 주소입니다.
-   *
-   * 사용자가 검색하고 선택한 주소를
-   * 화면에 표시할 때 기본값으로 사용할 수 있습니다.
-   */
   @Column(
       name = "address_name",
       nullable = false,
@@ -57,138 +57,93 @@ public class Residence extends BaseEntity {
   )
   private String addressName;
 
-  /**
-   * 도로명 주소
-   *
-   * 검색 결과에 도로명 주소가 없는 경우에는
-   * null일 수 있습니다.
-   */
   @Column(
       name = "road_address",
       length = 255
   )
   private String roadAddress;
 
-  /**
-   * 지번 주소
-   *
-   * 검색 결과에 지번 주소가 없는 경우에는
-   * null일 수 있습니다.
-   */
   @Column(
       name = "jibun_address",
       length = 255
   )
   private String jibunAddress;
 
-  /**
-   * 건물명
-   *
-   * 주소 검색 결과에 건물명이 없는 경우
-   * null일 수 있습니다.
-   */
   @Column(
       name = "building_name",
       length = 200
   )
   private String buildingName;
 
-  /**
-   * 우편번호
-   */
   @Column(
       name = "zone_no",
       length = 10
   )
   private String zoneNo;
 
-  /**
-   * 시/도
-   *
-   * 예:
-   * 서울특별시
-   * 부산광역시
-   * 경기도
-   */
   @Column(
       nullable = false,
       length = 50
   )
   private String sido;
 
-  /**
-   * 시/군/구
-   */
   @Column(
       nullable = false,
       length = 100
   )
   private String sigungu;
 
-  /**
-   * 법정동
-   *
-   * 이후 주소 기반 수거구역을 판별할 때
-   * 보조 정보로 사용합니다.
-   */
   @Column(
       name = "legal_dong",
       length = 100
   )
   private String legalDong;
 
-  /**
-   * 행정동
-   *
-   * 지자체 및 수거구역 데이터가
-   * 행정동 단위로 제공되는 경우 활용합니다.
-   */
   @Column(
       name = "administrative_dong",
       length = 100
   )
   private String administrativeDong;
 
-  /**
-   * 법정동 코드
-   *
-   * 주소 문자열보다 안정적으로
-   * 지역 데이터를 연결하기 위한 값입니다.
-   */
   @Column(
       name = "legal_dong_code",
       length = 20
   )
   private String legalDongCode;
 
-  /**
-   * 행정동 코드
-   *
-   * 이후 CollectionArea 매핑에 활용합니다.
-   */
   @Column(
       name = "administrative_dong_code",
       length = 20
   )
   private String administrativeDongCode;
 
-  /**
-   * 위도
-   */
   @Column(
       precision = 10,
       scale = 7
   )
   private BigDecimal latitude;
 
-  /**
-   * 경도
-   */
   @Column(
       precision = 10,
       scale = 7
   )
   private BigDecimal longitude;
+
+  /**
+   * 현재 Residence에 적용되는
+   * 폐기물 종류별 수거구역 관계입니다.
+   *
+   * Residence가 삭제되면 연결 정보도 함께 삭제하지만,
+   * CollectionArea 자체는 삭제하지 않습니다.
+   */
+  @OneToMany(
+      mappedBy = "residence",
+      cascade = CascadeType.ALL,
+      orphanRemoval = true
+  )
+  @Getter(AccessLevel.NONE)
+  private final List<ResidenceCollectionArea>
+      collectionAreaMappings = new ArrayList<>();
 
   private Residence(
       String addressName,
@@ -221,10 +176,6 @@ public class Residence extends BaseEntity {
     this.longitude = longitude;
   }
 
-  /**
-   * 사용자가 주소 검색 결과를 선택하여
-   * 일반주택 거주지를 처음 설정할 때 사용합니다.
-   */
   public static Residence create(
       String addressName,
       String roadAddress,
@@ -258,8 +209,11 @@ public class Residence extends BaseEntity {
   }
 
   /**
-   * 일반주택 사용자가 주소를 변경할 때
-   * 기존 Residence 정보를 갱신합니다.
+   * 사용자의 주소를 변경합니다.
+   *
+   * 주소가 바뀌면 기존 수거구역 적용 관계는
+   * 더 이상 유효하다고 보장할 수 없으므로 제거합니다.
+   * 이후 새 주소 기준으로 다시 매핑합니다.
    */
   public void update(
       String addressName,
@@ -290,5 +244,89 @@ public class Residence extends BaseEntity {
         administrativeDongCode;
     this.latitude = latitude;
     this.longitude = longitude;
+
+    clearCollectionAreas();
+  }
+
+  /**
+   * 특정 폐기물 종류의 수거구역을 설정합니다.
+   *
+   * 이미 같은 폐기물 종류의 매핑이 존재한다면
+   * 새로운 연결을 계속 생성하지 않고
+   * 기존 매핑의 CollectionArea만 변경합니다.
+   */
+  public void assignCollectionArea(
+      CollectionArea collectionArea,
+      CollectionWasteType wasteType
+  ) {
+    ResidenceCollectionArea existing =
+        findCollectionAreaMapping(
+            wasteType
+        );
+
+    if (existing != null) {
+      existing.changeCollectionArea(
+          collectionArea
+      );
+      return;
+    }
+
+    collectionAreaMappings.add(
+        ResidenceCollectionArea.create(
+            this,
+            collectionArea,
+            wasteType
+        )
+    );
+  }
+
+  /**
+   * 특정 폐기물 종류의 수거구역 연결을 제거합니다.
+   */
+  public void removeCollectionArea(
+      CollectionWasteType wasteType
+  ) {
+    collectionAreaMappings.removeIf(
+        mapping ->
+            mapping.getWasteType()
+                == wasteType
+    );
+  }
+
+  /**
+   * 주소 변경 등으로 기존 매핑이
+   * 더 이상 유효하지 않을 때 전체 연결을 제거합니다.
+   */
+  public void clearCollectionAreas() {
+    collectionAreaMappings.clear();
+  }
+
+  /**
+   * 외부에서 컬렉션 자체를 수정하지 못하도록
+   * 읽기 전용 List로 반환합니다.
+   */
+  public List<ResidenceCollectionArea>
+  getCollectionAreaMappings() {
+    return Collections.unmodifiableList(
+        collectionAreaMappings
+    );
+  }
+
+  /**
+   * 특정 폐기물 종류에 현재 적용되는
+   * 수거구역 관계를 찾습니다.
+   */
+  private ResidenceCollectionArea
+  findCollectionAreaMapping(
+      CollectionWasteType wasteType
+  ) {
+    return collectionAreaMappings.stream()
+        .filter(
+            mapping ->
+                mapping.getWasteType()
+                    == wasteType
+        )
+        .findFirst()
+        .orElse(null);
   }
 }

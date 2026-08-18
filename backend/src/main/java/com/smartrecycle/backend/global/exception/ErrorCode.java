@@ -184,6 +184,21 @@ public enum ErrorCode {
       HttpStatus.BAD_GATEWAY,
       "ADDRESS_002",
       "주소 검색 외부 API 호출에 실패했습니다."
+  ),
+
+  /*
+   * 지자체 공공데이터
+   */
+  PUBLIC_DATA_API_ERROR(
+      HttpStatus.BAD_GATEWAY,
+      "PUBLIC_DATA_001",
+      "지자체 공공데이터 API 호출에 실패했습니다."
+  ),
+
+  PUBLIC_DATA_INVALID_RESPONSE(
+      HttpStatus.BAD_GATEWAY,
+      "PUBLIC_DATA_002",
+      "지자체 공공데이터 응답 형식이 올바르지 않습니다."
   );
 
   private final HttpStatus status;
