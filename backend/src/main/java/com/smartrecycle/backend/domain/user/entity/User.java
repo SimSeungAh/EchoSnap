@@ -1,7 +1,9 @@
 package com.smartrecycle.backend.domain.user.entity;
 
 import com.smartrecycle.backend.domain.apartment.entity.Apartment;
+import com.smartrecycle.backend.domain.residence.entity.Residence;
 import com.smartrecycle.backend.global.entity.BaseEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
@@ -27,6 +30,10 @@ import lombok.NoArgsConstructor;
         @Index(
             name = "idx_users_apartment",
             columnList = "apartment_id"
+        ),
+        @Index(
+            name = "idx_users_residence",
+            columnList = "residence_id"
         ),
         @Index(
             name = "idx_users_residence_type",
@@ -106,11 +113,33 @@ public class User extends BaseEntity {
    * MANAGED_COMPLEX인 경우 사용합니다.
    *
    * GENERAL_HOUSING 사용자는 Apartment를 사용하지 않고,
-   * 이후 주소 및 수거구역 정보를 통해 일정을 조회합니다.
+   * Residence와 이후 CollectionArea를 통해
+   * 지역 배출 일정을 조회합니다.
    */
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "apartment_id")
   private Apartment apartment;
+
+  /**
+   * 주소 기반 지역 수거 일정을 사용하는
+   * 일반주택 사용자의 현재 거주지입니다.
+   *
+   * GENERAL_HOUSING인 경우 사용합니다.
+   *
+   * User가 현재 사용 중인 Residence의 생명주기를 관리하며,
+   * 일반주택에서 단지형 거주지로 변경할 경우
+   * 이전 Residence 데이터도 함께 제거합니다.
+   */
+  @OneToOne(
+      fetch = FetchType.LAZY,
+      cascade = CascadeType.ALL,
+      orphanRemoval = true
+  )
+  @JoinColumn(
+      name = "residence_id",
+      unique = true
+  )
+  private Residence residence;
 
   /**
    * 알림 수신 동의 여부
@@ -192,6 +221,9 @@ public class User extends BaseEntity {
    *
    * 아파트, 오피스텔 등 관리주체의 자체 일정이 존재하는 경우
    * 승인된 Apartment 데이터를 연결합니다.
+   *
+   * 이전에 GENERAL_HOUSING을 사용하고 있었다면
+   * 기존 주소 기반 Residence 연결을 제거합니다.
    */
   public void changeToManagedComplex(
       Apartment apartment
@@ -201,23 +233,30 @@ public class User extends BaseEntity {
 
     this.apartment =
         apartment;
+
+    this.residence =
+        null;
   }
 
   /**
-   * 주소 기반 지역 수거 일정을 사용하는 일반주택으로 변경합니다.
+   * 주소 기반 지역 수거 일정을 사용하는
+   * 일반주택으로 변경합니다.
    *
    * 이전에 단지형 거주지를 사용하고 있었다면
-   * 기존 Apartment 연결을 제거합니다.
-   *
-   * 실제 주소 및 수거구역 연결은
-   * 이후 주소 API/공공데이터 단계에서 추가합니다.
+   * 기존 Apartment 연결을 제거하고,
+   * 사용자가 선택한 주소 기반 Residence를 연결합니다.
    */
-  public void changeToGeneralHousing() {
+  public void changeToGeneralHousing(
+      Residence residence
+  ) {
     this.residenceType =
         ResidenceType.GENERAL_HOUSING;
 
     this.apartment =
         null;
+
+    this.residence =
+        residence;
   }
 
   /**

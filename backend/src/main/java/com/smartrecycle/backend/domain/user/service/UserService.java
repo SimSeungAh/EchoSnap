@@ -3,9 +3,11 @@ package com.smartrecycle.backend.domain.user.service;
 import com.smartrecycle.backend.domain.apartment.entity.Apartment;
 import com.smartrecycle.backend.domain.apartment.entity.ApartmentStatus;
 import com.smartrecycle.backend.domain.apartment.repository.ApartmentRepository;
+import com.smartrecycle.backend.domain.residence.entity.Residence;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateOnboardingRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserApartmentRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserRequest;
+import com.smartrecycle.backend.domain.user.dto.request.UpdateUserResidenceRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserSettingsRequest;
 import com.smartrecycle.backend.domain.user.dto.response.UserResponse;
 import com.smartrecycle.backend.domain.user.entity.User;
@@ -120,6 +122,69 @@ public class UserService {
 
         user.changeToManagedComplex(
             apartment
+        );
+
+        return UserResponse.from(user);
+    }
+
+    /**
+     * 주소 기반 지역 수거 일정을 사용하는
+     * 일반주택 거주지를 설정하거나 변경합니다.
+     *
+     * 최초 설정인 경우 Residence를 새로 생성하고,
+     * 이미 일반주택 주소가 설정되어 있는 경우에는
+     * 기존 Residence를 수정합니다.
+     *
+     * 주소를 설정하면 사용자의 residenceType은
+     * GENERAL_HOUSING으로 함께 변경되고,
+     * 기존 Apartment 연결은 제거됩니다.
+     */
+    @Transactional
+    public UserResponse updateResidence(
+        Long userId,
+        UpdateUserResidenceRequest request
+    ) {
+        User user = getUser(userId);
+
+        Residence residence =
+            user.getResidence();
+
+        if (residence == null) {
+            residence = Residence.create(
+                request.addressName(),
+                request.roadAddress(),
+                request.jibunAddress(),
+                request.buildingName(),
+                request.zoneNo(),
+                request.sido(),
+                request.sigungu(),
+                request.legalDong(),
+                request.administrativeDong(),
+                request.legalDongCode(),
+                request.administrativeDongCode(),
+                request.latitude(),
+                request.longitude()
+            );
+        } else {
+            residence.update(
+                request.addressName(),
+                request.roadAddress(),
+                request.jibunAddress(),
+                request.buildingName(),
+                request.zoneNo(),
+                request.sido(),
+                request.sigungu(),
+                request.legalDong(),
+                request.administrativeDong(),
+                request.legalDongCode(),
+                request.administrativeDongCode(),
+                request.latitude(),
+                request.longitude()
+            );
+        }
+
+        user.changeToGeneralHousing(
+            residence
         );
 
         return UserResponse.from(user);

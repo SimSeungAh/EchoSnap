@@ -29,13 +29,22 @@ public record UserResponse(
     /**
      * 사용자가 현재 선택한 거주 단지
      *
-     * MANAGED_COMPLEX 사용자의 경우
-     * 선택한 단지 정보를 반환합니다.
+     * MANAGED_COMPLEX인 경우 반환됩니다.
      *
      * GENERAL_HOUSING 또는
-     * 거주지 초기 설정 전에는 null일 수 있습니다.
+     * 거주지 초기 설정 전에는 null입니다.
      */
     UserApartmentResponse apartment,
+
+    /**
+     * 사용자가 현재 선택한 주소 기반 거주지
+     *
+     * GENERAL_HOUSING인 경우 반환됩니다.
+     *
+     * MANAGED_COMPLEX 또는
+     * 거주지 초기 설정 전에는 null입니다.
+     */
+    UserResidenceResponse residence,
 
     boolean notificationEnabled,
     boolean locationEnabled,
@@ -55,6 +64,9 @@ public record UserResponse(
             user.getResidenceType(),
             UserApartmentResponse.from(
                 user.getApartment()
+            ),
+            UserResidenceResponse.from(
+                user.getResidence()
             ),
             user.isNotificationEnabled(),
             user.isLocationEnabled(),

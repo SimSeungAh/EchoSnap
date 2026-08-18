@@ -3,6 +3,7 @@ package com.smartrecycle.backend.domain.user.controller;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateOnboardingRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserApartmentRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserRequest;
+import com.smartrecycle.backend.domain.user.dto.request.UpdateUserResidenceRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserSettingsRequest;
 import com.smartrecycle.backend.domain.user.dto.response.UserResponse;
 import com.smartrecycle.backend.domain.user.service.UserService;
@@ -38,9 +39,12 @@ public class UserController {
       summary = "내 정보 조회",
       description = """
                     현재 로그인한 사용자의 정보를 조회합니다.
-                    
+
                     거주지 초기 설정이 완료된 경우
                     residenceType과 해당 거주지 정보가 함께 반환됩니다.
+
+                    MANAGED_COMPLEX 사용자는 apartment,
+                    GENERAL_HOUSING 사용자는 residence 정보를 사용합니다.
                     """
   )
   public ApiResponse<UserResponse> getMyInfo(
@@ -140,15 +144,15 @@ public class UserController {
       summary = "거주 단지 설정",
       description = """
                     현재 로그인한 사용자의 거주 단지를 설정하거나 변경합니다.
-                    
-                    관리자가 승인한 아파트 등
+
+                    관리자가 승인한 아파트, 오피스텔 등
                     관리주체의 자체 배출 일정을 사용하는 거주지를 대상으로 합니다.
-                    
+
                     거주 단지를 설정하면 사용자의 residenceType은
                     MANAGED_COMPLEX로 변경됩니다.
-                    
-                    일반주택의 주소 기반 거주지 설정은
-                    주소 및 수거구역 기능에서 별도로 제공합니다.
+
+                    기존 일반주택 Residence가 존재하는 경우
+                    해당 연결은 제거됩니다.
                     """
   )
   public ApiResponse<UserResponse> updateApartment(
@@ -162,6 +166,43 @@ public class UserController {
 
     return ApiResponse.success(
         "거주 단지가 변경되었습니다.",
+        response
+    );
+  }
+
+  /**
+   * 주소 기반 지역 수거 일정을 사용하는
+   * 일반주택 거주지를 설정하거나 변경합니다.
+   */
+  @PatchMapping("/me/residence")
+  @Operation(
+      summary = "일반주택 거주지 설정",
+      description = """
+                    현재 로그인한 사용자의
+                    주소 기반 일반주택 거주지를 설정하거나 변경합니다.
+
+                    주소 검색 API에서 사용자가 선택한
+                    도로명/지번 주소, 행정구역 정보와 좌표를 저장합니다.
+
+                    주소를 설정하면 사용자의 residenceType은
+                    GENERAL_HOUSING으로 변경되고,
+                    기존 Apartment 연결은 제거됩니다.
+
+                    저장된 행정구역 정보는 이후
+                    CollectionArea 수거구역 연결에 사용됩니다.
+                    """
+  )
+  public ApiResponse<UserResponse> updateResidence(
+      @AuthenticationPrincipal CustomUserDetails userDetails,
+      @Valid @RequestBody UpdateUserResidenceRequest request
+  ) {
+    UserResponse response = userService.updateResidence(
+        userDetails.getUserId(),
+        request
+    );
+
+    return ApiResponse.success(
+        "일반주택 거주지가 변경되었습니다.",
         response
     );
   }
