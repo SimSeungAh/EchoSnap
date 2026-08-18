@@ -1,45 +1,64 @@
 package com.smartrecycle.backend.domain.user.dto.response;
 
+import com.smartrecycle.backend.domain.user.entity.ResidenceType;
 import com.smartrecycle.backend.domain.user.entity.Role;
 import com.smartrecycle.backend.domain.user.entity.User;
 import com.smartrecycle.backend.domain.user.entity.UserStatus;
 
 public record UserResponse(
 
-        Long id,
-        String email,
-        String nickname,
-        Role role,
-        UserStatus status,
+    Long id,
+    String email,
+    String nickname,
+    Role role,
+    UserStatus status,
 
-        /**
-         * 사용자가 현재 선택한 거주 아파트
-         *
-         * 아파트를 아직 선택하지 않았다면 null로 반환됩니다.
-         */
-        UserApartmentResponse apartment,
+    /**
+     * 사용자의 배출 일정 적용 거주지 유형
+     *
+     * 초기 설정 전에는 null일 수 있습니다.
+     *
+     * MANAGED_COMPLEX:
+     * 관리주체 또는 단지 자체 배출 일정 사용
+     *
+     * GENERAL_HOUSING:
+     * 주소 기반 지역 수거 일정 사용
+     */
+    ResidenceType residenceType,
 
-        boolean notificationEnabled,
-        boolean locationEnabled,
-        boolean onboardingCompleted
+    /**
+     * 사용자가 현재 선택한 거주 단지
+     *
+     * MANAGED_COMPLEX 사용자의 경우
+     * 선택한 단지 정보를 반환합니다.
+     *
+     * GENERAL_HOUSING 또는
+     * 거주지 초기 설정 전에는 null일 수 있습니다.
+     */
+    UserApartmentResponse apartment,
+
+    boolean notificationEnabled,
+    boolean locationEnabled,
+    boolean onboardingCompleted
 
 ) {
 
     public static UserResponse from(
-            User user
+        User user
     ) {
         return new UserResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getNickname(),
-                user.getRole(),
-                user.getStatus(),
-                UserApartmentResponse.from(
-                        user.getApartment()
-                ),
-                user.isNotificationEnabled(),
-                user.isLocationEnabled(),
-                user.isOnboardingCompleted()
+            user.getId(),
+            user.getEmail(),
+            user.getNickname(),
+            user.getRole(),
+            user.getStatus(),
+            user.getResidenceType(),
+            UserApartmentResponse.from(
+                user.getApartment()
+            ),
+            user.isNotificationEnabled(),
+            user.isLocationEnabled(),
+            user.isOnboardingCompleted()
         );
     }
 }

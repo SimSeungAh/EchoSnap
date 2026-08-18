@@ -1,9 +1,11 @@
 package com.smartrecycle.backend.domain.user.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 public record UpdateOnboardingRequest(
-        @NotBlank(message = "초기 설정 완료 여부는 필수입니다.")
-        Boolean completed
+
+    @NotNull(message = "초기 설정 완료 여부는 필수입니다.")
+    Boolean completed
+
 ) {
 }

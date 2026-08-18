@@ -25,10 +25,10 @@ public class UserService {
     private final ApartmentRepository apartmentRepository;
 
     /**
-     * 현재 로그인한 사용자의 정보를 조회
+     * 현재 로그인한 사용자의 정보를 조회합니다.
      */
     public UserResponse getMyInfo(
-            Long userId
+        Long userId
     ) {
         User user = getUser(userId);
 
@@ -36,99 +36,106 @@ public class UserService {
     }
 
     /**
-     * 현재 로그인한 사용자의 닉네임을 수정
+     * 현재 로그인한 사용자의 닉네임을 수정합니다.
      */
     @Transactional
     public UserResponse updateMyInfo(
-            Long userId,
-            UpdateUserRequest request
+        Long userId,
+        UpdateUserRequest request
     ) {
         User user = getUser(userId);
 
         user.updateNickname(
-                request.nickname()
+            request.nickname()
         );
 
         return UserResponse.from(user);
     }
 
     /**
-     * 알림 수신 동의와 위치 정보 이용 동의 설정을 변경
+     * 알림 수신 동의와 위치 정보 이용 동의를 변경합니다.
      */
     @Transactional
     public UserResponse updateSettings(
-            Long userId,
-            UpdateUserSettingsRequest request
+        Long userId,
+        UpdateUserSettingsRequest request
     ) {
         User user = getUser(userId);
 
         user.updateSettings(
-                request.notificationEnabled(),
-                request.locationEnabled()
+            request.notificationEnabled(),
+            request.locationEnabled()
         );
 
         return UserResponse.from(user);
     }
 
     /**
-     * 모바일 앱 초기 설정 완료 여부를 변경
+     * Flutter 앱 초기 설정 완료 여부를 변경합니다.
      */
     @Transactional
     public UserResponse updateOnboarding(
-            Long userId,
-            UpdateOnboardingRequest request
+        Long userId,
+        UpdateOnboardingRequest request
     ) {
         User user = getUser(userId);
 
         user.updateOnboardingCompleted(
-                request.completed()
+            request.completed()
         );
 
         return UserResponse.from(user);
     }
 
     /**
-     * 현재 로그인한 사용자의 거주 아파트를 설정하거나 변경
-     * 일반 사용자는 관리자가 승인한 아파트만 선택할 수 있음
+     * 단지 자체 배출 일정을 사용하는 거주지를 설정하거나 변경합니다.
+     *
+     * 아파트, 오피스텔 등 관리주체의 자체 일정이 있는 거주지는
+     * 관리자가 승인한 Apartment 데이터만 선택할 수 있습니다.
+     *
+     * 단지를 선택하면 사용자의 residenceType도
+     * MANAGED_COMPLEX로 함께 변경됩니다.
      */
     @Transactional
     public UserResponse updateApartment(
-            Long userId,
-            UpdateUserApartmentRequest request
+        Long userId,
+        UpdateUserApartmentRequest request
     ) {
         User user = getUser(userId);
 
         Apartment apartment = apartmentRepository.findById(
-                        request.apartmentId()
+                request.apartmentId()
+            )
+            .orElseThrow(
+                () -> new CustomException(
+                    ErrorCode.APARTMENT_NOT_FOUND
                 )
-                .orElseThrow(
-                        () -> new CustomException(
-                                ErrorCode.APARTMENT_NOT_FOUND
-                        )
-                );
+            );
 
         if (apartment.getStatus() != ApartmentStatus.APPROVED) {
             throw new CustomException(
-                    ErrorCode.APARTMENT_NOT_APPROVED
+                ErrorCode.APARTMENT_NOT_APPROVED
             );
         }
 
-        user.changeApartment(apartment);
+        user.changeToManagedComplex(
+            apartment
+        );
 
         return UserResponse.from(user);
     }
 
     /**
-     * 사용자 ID로 사용자를 조회
+     * 사용자 ID로 사용자를 조회합니다.
      */
     private User getUser(
-            Long userId
+        Long userId
     ) {
         return userRepository.findById(userId)
-                .orElseThrow(
-                        () -> new CustomException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
+            .orElseThrow(
+                () -> new CustomException(
+                    ErrorCode.USER_NOT_FOUND
+                )
+            );
     }
 }
