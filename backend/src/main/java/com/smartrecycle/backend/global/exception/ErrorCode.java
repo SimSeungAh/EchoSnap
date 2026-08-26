@@ -63,6 +63,12 @@ public enum ErrorCode {
       "거주 아파트가 설정되지 않았습니다."
   ),
 
+  USER_RESIDENCE_NOT_SET(
+      HttpStatus.BAD_REQUEST,
+      "USER_005",
+      "일반주택 거주지가 설정되지 않았습니다."
+  ),
+
   /*
    * 토큰
    */

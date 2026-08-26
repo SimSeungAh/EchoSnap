@@ -7,6 +7,7 @@ import com.smartrecycle.backend.domain.collectionarea.entity.CollectionArea;
 import com.smartrecycle.backend.domain.collectionarea.entity.CollectionAreaSourceType;
 import com.smartrecycle.backend.domain.collectionarea.entity.CollectionWasteType;
 import com.smartrecycle.backend.domain.collectionarea.repository.CollectionAreaRepository;
+import com.smartrecycle.backend.domain.schedule.service.CollectionAreaSchedulePublicDataSyncService;
 import com.smartrecycle.backend.global.exception.CustomException;
 import com.smartrecycle.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -35,20 +36,30 @@ public class CollectionAreaPublicDataSyncService {
   private final CollectionAreaRepository
       collectionAreaRepository;
 
+  private final CollectionAreaSchedulePublicDataSyncService
+      collectionAreaSchedulePublicDataSyncService;
+
   /**
    * 행정안전부 생활쓰레기배출정보 전체 데이터를
-   * CollectionArea와 동기화합니다.
+   * CollectionArea와 CollectionAreaSchedule에
+   * 동기화합니다.
    */
   public CollectionAreaSyncResultResponse syncAll() {
 
     HouseholdWastePublicDataResponse firstResponse =
-        fetchAndValidatePage(1);
+        fetchAndValidatePage(
+            1
+        );
 
     int sourceTotalCount =
-        resolveTotalCount(firstResponse);
+        resolveTotalCount(
+            firstResponse
+        );
 
     int pageCount =
-        calculatePageCount(sourceTotalCount);
+        calculatePageCount(
+            sourceTotalCount
+        );
 
     SyncCounter counter =
         new SyncCounter();
@@ -90,8 +101,7 @@ public class CollectionAreaPublicDataSyncService {
   }
 
   /**
-   * 공공데이터 한 페이지를 조회하고
-   * 응답 구조와 결과 코드를 검증합니다.
+   * 공공데이터 한 페이지를 조회합니다.
    */
   private HouseholdWastePublicDataResponse
   fetchAndValidatePage(
@@ -106,6 +116,7 @@ public class CollectionAreaPublicDataSyncService {
                   pageNo,
                   PAGE_SIZE
               );
+
     } catch (RestClientException e) {
       throw new CustomException(
           ErrorCode.PUBLIC_DATA_API_ERROR
@@ -120,9 +131,8 @@ public class CollectionAreaPublicDataSyncService {
   }
 
   /**
-   * HTTP 요청은 성공했더라도
-   * 공공데이터의 내부 resultCode가
-   * 실패일 수 있기 때문에 별도로 검증합니다.
+   * HTTP 성공 여부와 별개로
+   * 공공데이터 내부 resultCode와 응답 구조를 검증합니다.
    */
   private void validateResponse(
       HouseholdWastePublicDataResponse response
@@ -143,7 +153,11 @@ public class CollectionAreaPublicDataSyncService {
             .header()
             .resultCode();
 
-    if (!SUCCESS_RESULT_CODE.equals(resultCode)) {
+    if (
+        !SUCCESS_RESULT_CODE.equals(
+            resultCode
+        )
+    ) {
       throw new CustomException(
           ErrorCode.PUBLIC_DATA_API_ERROR
       );
@@ -151,7 +165,8 @@ public class CollectionAreaPublicDataSyncService {
   }
 
   /**
-   * 한 페이지의 데이터를 CollectionArea로 변환합니다.
+   * 한 페이지를 CollectionArea로 변환한 뒤 저장하고,
+   * 저장된 CollectionArea를 기준으로 일정까지 동기화합니다.
    */
   private void processPage(
       HouseholdWastePublicDataResponse response,
@@ -168,6 +183,9 @@ public class CollectionAreaPublicDataSyncService {
     }
 
     List<CollectionArea> saveTargets =
+        new ArrayList<>();
+
+    List<PendingScheduleSync> pendingScheduleSyncs =
         new ArrayList<>();
 
     for (
@@ -200,6 +218,10 @@ public class CollectionAreaPublicDataSyncService {
         continue;
       }
 
+      /*
+       * 동일한 전체 동기화 안에서
+       * 같은 MNG_NO가 반복되면 한 번만 처리합니다.
+       */
       if (
           !processedManagementNumbers.add(
               managementNumber
@@ -209,20 +231,15 @@ public class CollectionAreaPublicDataSyncService {
         continue;
       }
 
-      /*
-       * 실제 공공데이터의 배출방법 필드를 기준으로
-       * 이 레코드가 어떤 폐기물 종류에 적용되는지 확인합니다.
-       */
       Set<CollectionWasteType> supportedWasteTypes =
           detectSupportedWasteTypes(
               item
           );
 
       /*
-       * 생활/음식물/재활용 중
-       * 실제 적용 가능한 정보가 하나도 없는 레코드는
-       * SmartRecycle 수거구역으로 사용할 이유가 없으므로
-       * 건너뜁니다.
+       * 생활 / 음식물 / 재활용 중
+       * 실제 사용할 수 있는 정보가 하나도 없다면
+       * SmartRecycle에서는 사용하지 않습니다.
        */
       if (supportedWasteTypes.isEmpty()) {
         counter.skippedCount++;
@@ -283,22 +300,64 @@ public class CollectionAreaPublicDataSyncService {
       saveTargets.add(
           collectionArea
       );
-    }
 
-    if (!saveTargets.isEmpty()) {
-      collectionAreaRepository.saveAll(
-          saveTargets
+      /*
+       * CollectionArea가 DB에 저장되어 ID를 갖게 된 후
+       * 일정 저장을 수행해야 하므로
+       * 우선 pending 목록에 보관합니다.
+       */
+      pendingScheduleSyncs.add(
+          new PendingScheduleSync(
+              collectionArea,
+              item,
+              supportedWasteTypes
+          )
       );
     }
+
+    if (saveTargets.isEmpty()) {
+      return;
+    }
+
+    /*
+     * 신규 CollectionArea도 이 시점에서
+     * DB ID를 부여받습니다.
+     */
+    collectionAreaRepository.saveAll(
+        saveTargets
+    );
+
+    /*
+     * CollectionArea 저장 이후
+     * 같은 공공데이터로 종류별 배출 일정을 동기화합니다.
+     *
+     * 페이지 단위 Transaction은
+     * CollectionAreaSchedulePublicDataSyncService가 담당합니다.
+     */
+    List<
+        CollectionAreaSchedulePublicDataSyncService.SyncTarget
+        > scheduleSyncTargets =
+        pendingScheduleSyncs.stream()
+            .map(
+                pending ->
+                    new CollectionAreaSchedulePublicDataSyncService
+                        .SyncTarget(
+                        pending.collectionArea(),
+                        pending.item(),
+                        pending.supportedWasteTypes()
+                    )
+            )
+            .toList();
+
+    collectionAreaSchedulePublicDataSyncService
+        .syncPage(
+            scheduleSyncTargets
+        );
   }
 
   /**
-   * 공공데이터 한 건이 어떤 폐기물 종류의
-   * 실제 수거정보를 포함하는지 판단합니다.
-   *
-   * 실제 데이터에서 전용 수거구역이 아닌 항목에는
-   * 배출방법이 "해당없음"으로 내려오는 것을 확인했기 때문에
-   * 배출방법을 주요 판단 기준으로 사용합니다.
+   * 실제 공공데이터 한 건이
+   * 어떤 폐기물 종류의 정보를 제공하는지 판단합니다.
    */
   private Set<CollectionWasteType>
   detectSupportedWasteTypes(
@@ -342,19 +401,12 @@ public class CollectionAreaPublicDataSyncService {
     return result;
   }
 
-  /**
-   * "없음", "해당없음", "-" 같은 값은
-   * 실제 배출방법이 존재하지 않는 것으로 판단합니다.
-   */
   private boolean isMeaningfulEmissionMethod(
       String value
   ) {
-    String normalized =
-        normalizeOptionalPublicDataText(
-            value
-        );
-
-    return normalized != null;
+    return normalizeOptionalPublicDataText(
+        value
+    ) != null;
   }
 
   private List<HouseholdWastePublicDataResponse.Item>
@@ -376,6 +428,9 @@ public class CollectionAreaPublicDataSyncService {
     return items.item();
   }
 
+  /**
+   * 기존 CollectionArea를 최신 공공데이터로 갱신합니다.
+   */
   private CollectionArea updateExistingArea(
       CollectionArea collectionArea,
       String sido,
@@ -400,6 +455,10 @@ public class CollectionAreaPublicDataSyncService {
     return collectionArea;
   }
 
+  /**
+   * 처음 조회된 MNG_NO라면
+   * 새로운 CollectionArea를 생성합니다.
+   */
   private CollectionArea createNewArea(
       String managementNumber,
       String sido,
@@ -489,10 +548,6 @@ public class CollectionAreaPublicDataSyncService {
     return sigungu + " 전체";
   }
 
-  /**
-   * 공공데이터에서 값이 없음을 표현하는
-   * 대표 문자열을 null로 정규화합니다.
-   */
   private String normalizeOptionalPublicDataText(
       String value
   ) {
@@ -564,6 +619,25 @@ public class CollectionAreaPublicDataSyncService {
     return trimmed.isEmpty()
         ? null
         : trimmed;
+  }
+
+  /**
+   * CollectionArea 저장 전까지
+   * Item과 지원 폐기물 종류를 함께 들고 있는
+   * Service 내부용 데이터입니다.
+   */
+  private record PendingScheduleSync(
+      CollectionArea collectionArea,
+      HouseholdWastePublicDataResponse.Item item,
+      Set<CollectionWasteType> supportedWasteTypes
+  ) {
+
+    private PendingScheduleSync {
+      supportedWasteTypes =
+          Set.copyOf(
+              supportedWasteTypes
+          );
+    }
   }
 
   private static class SyncCounter {

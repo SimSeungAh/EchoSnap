@@ -4,6 +4,7 @@ import com.smartrecycle.backend.domain.apartment.entity.Apartment;
 import com.smartrecycle.backend.domain.apartment.entity.ApartmentStatus;
 import com.smartrecycle.backend.domain.apartment.repository.ApartmentRepository;
 import com.smartrecycle.backend.domain.residence.entity.Residence;
+import com.smartrecycle.backend.domain.residence.service.ResidenceCollectionAreaMatchService;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateOnboardingRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserApartmentRequest;
 import com.smartrecycle.backend.domain.user.dto.request.UpdateUserRequest;
@@ -24,7 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     private final UserRepository userRepository;
+
     private final ApartmentRepository apartmentRepository;
+
+    private final ResidenceCollectionAreaMatchService
+        residenceCollectionAreaMatchService;
 
     /**
      * 현재 로그인한 사용자의 정보를 조회합니다.
@@ -32,9 +37,14 @@ public class UserService {
     public UserResponse getMyInfo(
         Long userId
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
 
-        return UserResponse.from(user);
+        return UserResponse.from(
+            user
+        );
     }
 
     /**
@@ -45,13 +55,18 @@ public class UserService {
         Long userId,
         UpdateUserRequest request
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
 
         user.updateNickname(
             request.nickname()
         );
 
-        return UserResponse.from(user);
+        return UserResponse.from(
+            user
+        );
     }
 
     /**
@@ -62,14 +77,19 @@ public class UserService {
         Long userId,
         UpdateUserSettingsRequest request
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
 
         user.updateSettings(
             request.notificationEnabled(),
             request.locationEnabled()
         );
 
-        return UserResponse.from(user);
+        return UserResponse.from(
+            user
+        );
     }
 
     /**
@@ -80,13 +100,18 @@ public class UserService {
         Long userId,
         UpdateOnboardingRequest request
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
 
         user.updateOnboardingCompleted(
             request.completed()
         );
 
-        return UserResponse.from(user);
+        return UserResponse.from(
+            user
+        );
     }
 
     /**
@@ -103,18 +128,26 @@ public class UserService {
         Long userId,
         UpdateUserApartmentRequest request
     ) {
-        User user = getUser(userId);
-
-        Apartment apartment = apartmentRepository.findById(
-                request.apartmentId()
-            )
-            .orElseThrow(
-                () -> new CustomException(
-                    ErrorCode.APARTMENT_NOT_FOUND
-                )
+        User user =
+            getUser(
+                userId
             );
 
-        if (apartment.getStatus() != ApartmentStatus.APPROVED) {
+        Apartment apartment =
+            apartmentRepository.findById(
+                    request.apartmentId()
+                )
+                .orElseThrow(
+                    () ->
+                        new CustomException(
+                            ErrorCode.APARTMENT_NOT_FOUND
+                        )
+                );
+
+        if (
+            apartment.getStatus()
+                != ApartmentStatus.APPROVED
+        ) {
             throw new CustomException(
                 ErrorCode.APARTMENT_NOT_APPROVED
             );
@@ -124,7 +157,9 @@ public class UserService {
             apartment
         );
 
-        return UserResponse.from(user);
+        return UserResponse.from(
+            user
+        );
     }
 
     /**
@@ -138,34 +173,45 @@ public class UserService {
      * 주소를 설정하면 사용자의 residenceType은
      * GENERAL_HOUSING으로 함께 변경되고,
      * 기존 Apartment 연결은 제거됩니다.
+     *
+     * 그 후 행정동/법정동 정보를 기준으로
+     * 생활쓰레기, 음식물쓰레기, 재활용품 각각에
+     * 적용되는 CollectionArea를 자동 매칭합니다.
      */
     @Transactional
     public UserResponse updateResidence(
         Long userId,
         UpdateUserResidenceRequest request
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
 
         Residence residence =
             user.getResidence();
 
         if (residence == null) {
-            residence = Residence.create(
-                request.addressName(),
-                request.roadAddress(),
-                request.jibunAddress(),
-                request.buildingName(),
-                request.zoneNo(),
-                request.sido(),
-                request.sigungu(),
-                request.legalDong(),
-                request.administrativeDong(),
-                request.legalDongCode(),
-                request.administrativeDongCode(),
-                request.latitude(),
-                request.longitude()
-            );
+
+            residence =
+                Residence.create(
+                    request.addressName(),
+                    request.roadAddress(),
+                    request.jibunAddress(),
+                    request.buildingName(),
+                    request.zoneNo(),
+                    request.sido(),
+                    request.sigungu(),
+                    request.legalDong(),
+                    request.administrativeDong(),
+                    request.legalDongCode(),
+                    request.administrativeDongCode(),
+                    request.latitude(),
+                    request.longitude()
+                );
+
         } else {
+
             residence.update(
                 request.addressName(),
                 request.roadAddress(),
@@ -183,11 +229,30 @@ public class UserService {
             );
         }
 
+        /*
+         * 먼저 일반주택 Residence를 User와 연결합니다.
+         */
         user.changeToGeneralHousing(
             residence
         );
 
-        return UserResponse.from(user);
+        /*
+         * 저장된 주소를 기준으로
+         * 실제 지자체 CollectionArea 후보를 찾고
+         * 폐기물 종류별로 확실한 경우에만 연결합니다.
+         *
+         * 공공데이터가 아직 동기화되지 않았거나
+         * 매칭 결과가 애매하더라도
+         * 사용자 주소 저장 자체는 정상적으로 완료됩니다.
+         */
+        residenceCollectionAreaMatchService
+            .matchAndAssign(
+                residence
+            );
+
+        return UserResponse.from(
+            user
+        );
     }
 
     /**
@@ -196,11 +261,14 @@ public class UserService {
     private User getUser(
         Long userId
     ) {
-        return userRepository.findById(userId)
+        return userRepository.findById(
+                userId
+            )
             .orElseThrow(
-                () -> new CustomException(
-                    ErrorCode.USER_NOT_FOUND
-                )
+                () ->
+                    new CustomException(
+                        ErrorCode.USER_NOT_FOUND
+                    )
             );
     }
 }
