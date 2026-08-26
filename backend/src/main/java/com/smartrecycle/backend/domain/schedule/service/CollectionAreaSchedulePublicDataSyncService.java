@@ -79,18 +79,34 @@ public class CollectionAreaSchedulePublicDataSyncService {
         new ArrayList<>();
 
     /*
-     * 이전 동기화 때는 존재했지만
-     * 이번 공공데이터에서는 더 이상 지원하지 않는 종류라면
-     * 오래된 일정을 제거합니다.
+     * 이전 공공데이터에는 존재했지만
+     * 이번 데이터에서는 더 이상 지원하지 않는
+     * 폐기물 종류의 일정을 정리합니다.
+     *
+     * 단,
+     *
+     * ADMIN_APPROVED_REPORT
+     *
+     * 즉 주민 제보를 관리자가 직접 검토해
+     * 공식 일정으로 보정한 데이터는
+     * 공공데이터에서 해당 종류가 사라졌다는 이유만으로
+     * 자동 삭제하지 않습니다.
      */
     for (
         CollectionAreaSchedule existing
         : existingSchedules
     ) {
-      if (
+      boolean removedFromPublicData =
           !supportedWasteTypes.contains(
               existing.getWasteType()
-          )
+          );
+
+      boolean protectedByAdminApproval =
+          existing.isAdminApprovedOverride();
+
+      if (
+          removedFromPublicData
+              && !protectedByAdminApproval
       ) {
         deleteTargets.add(
             existing
@@ -98,6 +114,10 @@ public class CollectionAreaSchedulePublicDataSyncService {
       }
     }
 
+    /*
+     * 이번 공공데이터에서 지원하는
+     * 폐기물 종류를 생성 또는 갱신합니다.
+     */
     for (
         CollectionWasteType wasteType
         : supportedWasteTypes
@@ -114,6 +134,10 @@ public class CollectionAreaSchedulePublicDataSyncService {
               wasteType
           );
 
+      /*
+       * 아직 공식 일정이 없다면
+       * 공공데이터 출처 일정으로 새로 생성합니다.
+       */
       if (existing == null) {
         saveTargets.add(
             CollectionAreaSchedule
@@ -133,6 +157,20 @@ public class CollectionAreaSchedulePublicDataSyncService {
         continue;
       }
 
+      /*
+       * 기존 일정이 있으면 갱신합니다.
+       *
+       * CollectionAreaSchedule 내부에서:
+       *
+       * PUBLIC_DATA
+       * → 일정 규칙까지 갱신
+       *
+       * ADMIN_APPROVED_REPORT
+       * → 요일/시간 규칙 보호
+       * → 방법/장소 등 부가 정보만 갱신
+       *
+       * 하도록 처리되어 있습니다.
+       */
       existing.updateFromPublicData(
           scheduleData.emissionDays(),
           scheduleData.startTime(),
@@ -148,6 +186,10 @@ public class CollectionAreaSchedulePublicDataSyncService {
       );
     }
 
+    /*
+     * 공공데이터 출처이면서
+     * 더 이상 지원되지 않는 일정만 삭제합니다.
+     */
     if (!deleteTargets.isEmpty()) {
       collectionAreaScheduleRepository
           .deleteAll(
@@ -155,6 +197,9 @@ public class CollectionAreaSchedulePublicDataSyncService {
           );
     }
 
+    /*
+     * 신규 또는 갱신된 일정을 저장합니다.
+     */
     if (!saveTargets.isEmpty()) {
       collectionAreaScheduleRepository
           .saveAll(
@@ -279,7 +324,8 @@ public class CollectionAreaSchedulePublicDataSyncService {
    * 다음 날 00:00으로 정규화합니다.
    *
    * 해석할 수 없는 값 하나 때문에
-   * 전체 공공데이터 동기화를 실패시키지 않고 null 처리합니다.
+   * 전체 공공데이터 동기화를 실패시키지 않고
+   * null 처리합니다.
    */
   private LocalTime parseTimeOrNull(
       String value
@@ -352,7 +398,8 @@ public class CollectionAreaSchedulePublicDataSyncService {
 
   /**
    * CollectionArea 동기화 Service에서
-   * 일정 동기화 Service로 전달하는 한 건의 데이터입니다.
+   * 일정 동기화 Service로 전달하는
+   * 공공데이터 한 건입니다.
    */
   public record SyncTarget(
       CollectionArea collectionArea,
@@ -376,8 +423,9 @@ public class CollectionAreaSchedulePublicDataSyncService {
   }
 
   /**
-   * 공공데이터의 종류별 필드를
-   * CollectionAreaSchedule 생성에 필요한 형태로 묶습니다.
+   * 공공데이터의 폐기물 종류별 필드를
+   * CollectionAreaSchedule 생성에 필요한
+   * 형태로 묶습니다.
    */
   private record ScheduleData(
       String emissionDays,

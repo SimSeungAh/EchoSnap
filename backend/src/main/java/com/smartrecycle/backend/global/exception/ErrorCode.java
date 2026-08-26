@@ -124,7 +124,7 @@ public enum ErrorCode {
   ),
 
   /*
-   * 폐기물 품목 및 분리배출 가이드
+   * 폐기물
    */
   WASTE_ITEM_NOT_FOUND(
       HttpStatus.NOT_FOUND,
@@ -151,7 +151,7 @@ public enum ErrorCode {
   ),
 
   /*
-   * 아파트별 배출 일정
+   * 공식 배출 일정
    */
   RECYCLE_SCHEDULE_NOT_FOUND(
       HttpStatus.NOT_FOUND,
@@ -162,7 +162,7 @@ public enum ErrorCode {
   RECYCLE_SCHEDULE_ALREADY_EXISTS(
       HttpStatus.CONFLICT,
       "SCHEDULE_002",
-      "동일한 아파트와 품목에 중복된 배출 일정이 존재합니다."
+      "동일한 거주 범위와 품목에 충돌하는 배출 일정이 존재합니다."
   ),
 
   INVALID_RECYCLE_SCHEDULE(
@@ -175,6 +175,87 @@ public enum ErrorCode {
       HttpStatus.BAD_REQUEST,
       "SCHEDULE_004",
       "배출 종료 시간은 시작 시간보다 늦어야 합니다."
+  ),
+
+  SCHEDULE_EXCEPTION_ALREADY_EXISTS(
+      HttpStatus.CONFLICT,
+      "SCHEDULE_005",
+      "해당 날짜에 이미 공식 예외 일정이 존재합니다."
+  ),
+
+  /*
+   * 주민 일정 제보
+   */
+  SCHEDULE_REPORT_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "REPORT_001",
+      "일정 제보를 찾을 수 없습니다."
+  ),
+
+  INVALID_SCHEDULE_REPORT(
+      HttpStatus.BAD_REQUEST,
+      "REPORT_002",
+      "일정 제보 정보가 올바르지 않습니다."
+  ),
+
+  SCHEDULE_REPORT_TARGET_MISMATCH(
+      HttpStatus.FORBIDDEN,
+      "REPORT_003",
+      "현재 거주지에 적용되는 일정만 제보할 수 있습니다."
+  ),
+
+  SCHEDULE_REPORT_OFFICIAL_SCHEDULE_EXISTS(
+      HttpStatus.CONFLICT,
+      "REPORT_004",
+      "이미 공식 일정이 존재합니다. 일정 정정 제보를 이용해주세요."
+  ),
+
+  SCHEDULE_REPORT_REFERENCE_REQUIRED(
+      HttpStatus.BAD_REQUEST,
+      "REPORT_005",
+      "기존 공식 일정 정보가 필요합니다."
+  ),
+
+  SCHEDULE_REPORT_REFERENCE_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "REPORT_006",
+      "참조할 공식 일정을 찾을 수 없습니다."
+  ),
+
+  SCHEDULE_REPORT_COLLECTION_AREA_NOT_MATCHED(
+      HttpStatus.BAD_REQUEST,
+      "REPORT_007",
+      "현재 주소에 해당 폐기물 종류의 수거구역이 연결되어 있지 않습니다."
+  ),
+
+  INVALID_SCHEDULE_REPORT_TIME(
+      HttpStatus.BAD_REQUEST,
+      "REPORT_008",
+      "제보한 배출 시간 정보가 올바르지 않습니다."
+  ),
+
+  SCHEDULE_REPORT_NOT_PENDING(
+      HttpStatus.CONFLICT,
+      "REPORT_009",
+      "검토가 완료된 일정 제보에는 더 이상 처리할 수 없습니다."
+  ),
+
+  SCHEDULE_REPORT_SELF_CONFIRMATION_NOT_ALLOWED(
+      HttpStatus.BAD_REQUEST,
+      "REPORT_010",
+      "자신이 등록한 일정 제보에는 확인할 수 없습니다."
+  ),
+
+  SCHEDULE_REPORT_CONFIRMATION_SCOPE_MISMATCH(
+      HttpStatus.FORBIDDEN,
+      "REPORT_011",
+      "같은 일정 적용 범위의 주민만 이 제보를 확인할 수 있습니다."
+  ),
+
+  SCHEDULE_REPORT_PUBLIC_REASON_REQUIRED(
+      HttpStatus.BAD_REQUEST,
+      "REPORT_012",
+      "일시 변경 승인 시 사용자에게 안내할 사유는 필수입니다."
   ),
 
   /*

@@ -8,7 +8,9 @@ import com.smartrecycle.backend.domain.schedule.dto.response.RecycleScheduleResp
 import com.smartrecycle.backend.domain.schedule.dto.response.RecycleScheduleTimeResponse;
 import com.smartrecycle.backend.domain.schedule.dto.response.WasteItemScheduleResponse;
 import com.smartrecycle.backend.domain.schedule.entity.RecycleSchedule;
+import com.smartrecycle.backend.domain.schedule.entity.ScheduleException;
 import com.smartrecycle.backend.domain.schedule.repository.RecycleScheduleRepository;
+import com.smartrecycle.backend.domain.schedule.repository.ScheduleExceptionRepository;
 import com.smartrecycle.backend.domain.user.entity.User;
 import com.smartrecycle.backend.domain.user.repository.UserRepository;
 import com.smartrecycle.backend.domain.waste.entity.WasteItem;
@@ -23,9 +25,13 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,11 +40,19 @@ import java.util.stream.Collectors;
 public class RecycleScheduleQueryService {
 
     private final RecycleScheduleRepository
-            recycleScheduleRepository;
+        recycleScheduleRepository;
 
-    private final ApartmentRepository apartmentRepository;
-    private final WasteItemRepository wasteItemRepository;
-    private final UserRepository userRepository;
+    private final ScheduleExceptionRepository
+        scheduleExceptionRepository;
+
+    private final ApartmentRepository
+        apartmentRepository;
+
+    private final WasteItemRepository
+        wasteItemRepository;
+
+    private final UserRepository
+        userRepository;
 
     /**
      * 배출 일정 하나를 상세 조회합니다.
@@ -46,445 +60,972 @@ public class RecycleScheduleQueryService {
      * 관리자 일정 상세 화면에서 사용합니다.
      */
     public RecycleScheduleResponse getSchedule(
-            Long scheduleId
+        Long scheduleId
     ) {
         RecycleSchedule schedule =
-                recycleScheduleRepository
-                        .findDetailById(scheduleId)
-                        .orElseThrow(
-                                () -> new CustomException(
-                                        ErrorCode
-                                                .RECYCLE_SCHEDULE_NOT_FOUND
-                                )
-                        );
+            recycleScheduleRepository
+                .findDetailById(
+                    scheduleId
+                )
+                .orElseThrow(
+                    () ->
+                        new CustomException(
+                            ErrorCode.RECYCLE_SCHEDULE_NOT_FOUND
+                        )
+                );
 
         return RecycleScheduleResponse.from(
-                schedule
+            schedule
         );
     }
 
     /**
-     * 특정 아파트에 등록된 공식 배출 일정 전체를 조회합니다.
+     * 특정 아파트에 등록된
+     * 공식 반복 배출 일정 전체를 조회합니다.
      *
-     * 관리자 일정 목록 화면에서 사용합니다.
+     * 관리자 일정 목록에서 사용합니다.
+     *
+     * 이 API는 반복 공식 일정 자체를 관리하기 위한 것이므로
+     * ScheduleException을 섞지 않습니다.
      */
     public List<RecycleScheduleResponse>
     getSchedulesByApartment(
-            Long apartmentId
+        Long apartmentId
     ) {
-        getApprovedApartment(apartmentId);
+        getApprovedApartment(
+            apartmentId
+        );
 
         return recycleScheduleRepository
-                .findAllByApartmentId(apartmentId)
-                .stream()
-                .map(RecycleScheduleResponse::from)
-                .toList();
+            .findAllByApartmentId(
+                apartmentId
+            )
+            .stream()
+            .map(
+                RecycleScheduleResponse::from
+            )
+            .toList();
     }
 
     /**
-     * 로그인한 사용자의 거주 아파트에 등록된
-     * 전체 공식 배출 일정을 품목별로 계산해 반환합니다.
+     * 로그인 사용자의 거주 아파트 기준
+     * 전체 배출 일정을 조회합니다.
      */
     public ApartmentScheduleResponse
     getMyApartmentSchedule(
-            Long userId
+        Long userId
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
+
         Apartment apartment =
-                getUserApartment(user);
+            getUserApartment(
+                user
+            );
 
         LocalDateTime referenceDateTime =
-                LocalDateTime.now();
+            LocalDateTime.now();
 
         return buildApartmentScheduleResponse(
-                apartment,
-                referenceDateTime
+            apartment,
+            referenceDateTime
         );
     }
 
     /**
-     * 로그인한 사용자의 거주 아파트를 기준으로
-     * 특정 폐기물 품목의 공식 일정을 계산합니다.
+     * 로그인 사용자의 거주 아파트 기준
+     * 특정 폐기물 품목의 일정을 조회합니다.
      */
     public WasteItemScheduleResponse
     getMyWasteItemSchedule(
-            Long userId,
-            Long wasteItemId
+        Long userId,
+        Long wasteItemId
     ) {
-        User user = getUser(userId);
+        User user =
+            getUser(
+                userId
+            );
+
         Apartment apartment =
-                getUserApartment(user);
+            getUserApartment(
+                user
+            );
 
         WasteItem wasteItem =
-                getActiveWasteItem(wasteItemId);
+            getActiveWasteItem(
+                wasteItemId
+            );
 
         List<RecycleSchedule> schedules =
-                recycleScheduleRepository
-                        .findAllByApartmentIdAndWasteItemId(
-                                apartment.getId(),
-                                wasteItem.getId()
-                        );
+            recycleScheduleRepository
+                .findAllByApartmentIdAndWasteItemId(
+                    apartment.getId(),
+                    wasteItem.getId()
+                );
+
+        LocalDateTime referenceDateTime =
+            LocalDateTime.now();
+
+        List<ScheduleException> exceptions =
+            getWasteItemExceptions(
+                apartment.getId(),
+                wasteItem.getId(),
+                referenceDateTime.toLocalDate()
+            );
 
         return buildWasteItemScheduleResponse(
-                wasteItem,
-                schedules,
-                LocalDateTime.now()
+            wasteItem,
+            schedules,
+            exceptions,
+            referenceDateTime
         );
     }
 
     /**
      * 지정된 아파트와 폐기물 품목을 기준으로
-     * 공식 일정을 계산합니다.
+     * 사용자용 일정을 계산합니다.
      *
-     * 폐기물 가이드 응답에 일정 정보를 결합할 때
-     * 내부 서비스에서 재사용할 수 있습니다.
+     * 폐기물 가이드에 일정 정보를 결합할 때도
+     * 내부적으로 재사용할 수 있습니다.
      */
     public WasteItemScheduleResponse
     getWasteItemSchedule(
-            Long apartmentId,
-            Long wasteItemId
+        Long apartmentId,
+        Long wasteItemId
     ) {
         Apartment apartment =
-                getApprovedApartment(apartmentId);
+            getApprovedApartment(
+                apartmentId
+            );
 
         WasteItem wasteItem =
-                getActiveWasteItem(wasteItemId);
+            getActiveWasteItem(
+                wasteItemId
+            );
 
         List<RecycleSchedule> schedules =
-                recycleScheduleRepository
-                        .findAllByApartmentIdAndWasteItemId(
-                                apartment.getId(),
-                                wasteItem.getId()
-                        );
+            recycleScheduleRepository
+                .findAllByApartmentIdAndWasteItemId(
+                    apartment.getId(),
+                    wasteItem.getId()
+                );
+
+        LocalDateTime referenceDateTime =
+            LocalDateTime.now();
+
+        List<ScheduleException> exceptions =
+            getWasteItemExceptions(
+                apartment.getId(),
+                wasteItem.getId(),
+                referenceDateTime.toLocalDate()
+            );
 
         return buildWasteItemScheduleResponse(
-                wasteItem,
-                schedules,
-                LocalDateTime.now()
+            wasteItem,
+            schedules,
+            exceptions,
+            referenceDateTime
         );
     }
 
     /**
      * 아파트의 전체 일정을 품목별로 묶어 계산합니다.
+     *
+     * 반복 일정뿐 아니라
+     * 예외 일정만 존재하는 품목도 사용자 화면에
+     * 표시할 수 있도록 두 데이터를 함께 묶습니다.
      */
     private ApartmentScheduleResponse
     buildApartmentScheduleResponse(
-            Apartment apartment,
-            LocalDateTime referenceDateTime
+        Apartment apartment,
+        LocalDateTime referenceDateTime
     ) {
         List<RecycleSchedule> schedules =
-                recycleScheduleRepository
-                        .findAllByApartmentId(
-                                apartment.getId()
-                        );
+            recycleScheduleRepository
+                .findAllByApartmentId(
+                    apartment.getId()
+                );
 
         /*
-         * 같은 폐기물 품목에 월요일, 수요일 등
-         * 여러 일정이 존재할 수 있으므로 품목 ID별로 묶습니다.
+         * 어제 시작한 overnight 예외가
+         * 오늘 새벽까지 이어질 가능성까지 고려하기 위해
+         * 하루 전부터 조회합니다.
          *
-         * LinkedHashMap을 사용하여 Repository에서 조회된
-         * 품목 정렬 순서를 유지합니다.
+         * 현재 공동주택 주민 제보 검증에서는
+         * overnight을 허용하지 않지만,
+         * 데이터 계산 로직은 조금 더 방어적으로 처리합니다.
          */
+        LocalDate exceptionStartDate =
+            referenceDateTime
+                .toLocalDate()
+                .minusDays(1);
+
+        List<ScheduleException> exceptions =
+            scheduleExceptionRepository
+                .findAllByApartmentIdAndEffectiveDateGreaterThanEqualOrderByEffectiveDateAsc(
+                    apartment.getId(),
+                    exceptionStartDate
+                );
+
         Map<Long, List<RecycleSchedule>>
-                schedulesByWasteItem =
-                schedules.stream()
-                        .collect(
-                                Collectors.groupingBy(
-                                        schedule ->
-                                                schedule
-                                                        .getWasteItem()
-                                                        .getId(),
-                                        LinkedHashMap::new,
-                                        Collectors.toList()
-                                )
-                        );
+            schedulesByWasteItem =
+            schedules.stream()
+                .collect(
+                    Collectors.groupingBy(
+                        schedule ->
+                            schedule
+                                .getWasteItem()
+                                .getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                    )
+                );
+
+        Map<Long, List<ScheduleException>>
+            exceptionsByWasteItem =
+            exceptions.stream()
+                .filter(
+                    exception ->
+                        exception.getWasteItem()
+                            != null
+                )
+                .collect(
+                    Collectors.groupingBy(
+                        exception ->
+                            exception
+                                .getWasteItem()
+                                .getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                    )
+                );
+
+        /*
+         * 정기 일정이 없는 품목이라도
+         * 특정 날짜의 공식 예외 일정이 존재할 수 있으므로
+         * 품목 목록을 합칩니다.
+         */
+        Map<Long, WasteItem> wasteItems =
+            new LinkedHashMap<>();
+
+        for (RecycleSchedule schedule : schedules) {
+            wasteItems.putIfAbsent(
+                schedule.getWasteItem()
+                    .getId(),
+                schedule.getWasteItem()
+            );
+        }
+
+        for (ScheduleException exception : exceptions) {
+            if (exception.getWasteItem() != null) {
+                wasteItems.putIfAbsent(
+                    exception.getWasteItem()
+                        .getId(),
+                    exception.getWasteItem()
+                );
+            }
+        }
 
         List<WasteItemScheduleResponse> items =
-                schedulesByWasteItem.values()
-                        .stream()
-                        .map(itemSchedules -> {
-                            WasteItem wasteItem =
-                                    itemSchedules
-                                            .get(0)
-                                            .getWasteItem();
+            new ArrayList<>();
 
-                            return buildWasteItemScheduleResponse(
-                                    wasteItem,
-                                    itemSchedules,
-                                    referenceDateTime
-                            );
-                        })
-                        .toList();
+        for (
+            Map.Entry<Long, WasteItem> entry
+            : wasteItems.entrySet()
+        ) {
+            Long wasteItemId =
+                entry.getKey();
+
+            WasteItem wasteItem =
+                entry.getValue();
+
+            List<RecycleSchedule> itemSchedules =
+                schedulesByWasteItem
+                    .getOrDefault(
+                        wasteItemId,
+                        List.of()
+                    );
+
+            List<ScheduleException> itemExceptions =
+                exceptionsByWasteItem
+                    .getOrDefault(
+                        wasteItemId,
+                        List.of()
+                    );
+
+            items.add(
+                buildWasteItemScheduleResponse(
+                    wasteItem,
+                    itemSchedules,
+                    itemExceptions,
+                    referenceDateTime
+                )
+            );
+        }
 
         return ApartmentScheduleResponse.of(
-                apartment,
-                referenceDateTime,
-                items
+            apartment,
+            referenceDateTime,
+            items
         );
     }
 
     /**
-     * 한 품목의 일정 목록을 바탕으로
-     * 오늘 배출 가능 여부와 다음 배출일을 계산합니다.
+     * 한 품목에 대해
+     * 정기 일정 + 특정 날짜 예외 일정을 결합하여
+     * 사용자용 계산 결과를 만듭니다.
      */
     private WasteItemScheduleResponse
     buildWasteItemScheduleResponse(
-            WasteItem wasteItem,
-            List<RecycleSchedule> schedules,
-            LocalDateTime referenceDateTime
+        WasteItem wasteItem,
+        List<RecycleSchedule> schedules,
+        List<ScheduleException> exceptions,
+        LocalDateTime referenceDateTime
     ) {
+        LocalDate referenceDate =
+            referenceDateTime.toLocalDate();
+
+        ScheduleException todayException =
+            findException(
+                exceptions,
+                referenceDate
+            );
+
+        ScheduleException yesterdayException =
+            findException(
+                exceptions,
+                referenceDate.minusDays(1)
+            );
+
         boolean availableToday =
-                isAvailableToday(
-                        schedules,
-                        referenceDateTime.toLocalDate()
-                );
+            isAvailableToday(
+                schedules,
+                todayException,
+                referenceDate
+            );
 
         boolean availableNow =
-                isAvailableNow(
-                        schedules,
-                        referenceDateTime
-                );
+            isAvailableNow(
+                schedules,
+                todayException,
+                yesterdayException,
+                referenceDateTime
+            );
 
         NextScheduleResult nextSchedule =
-                calculateNextSchedule(
-                        schedules,
-                        referenceDateTime
-                );
+            calculateNextSchedule(
+                schedules,
+                exceptions,
+                referenceDateTime
+            );
 
         List<RecycleScheduleTimeResponse>
-                scheduleResponses =
-                schedules.stream()
-                        .map(
-                                RecycleScheduleTimeResponse::from
-                        )
-                        .toList();
+            scheduleResponses =
+            schedules.stream()
+                .map(
+                    RecycleScheduleTimeResponse::from
+                )
+                .toList();
 
         return WasteItemScheduleResponse.of(
-                wasteItem,
-                availableToday,
-                availableNow,
-                nextSchedule.nextAvailableDate(),
-                nextSchedule.nextAvailableAt(),
-                scheduleResponses
+            wasteItem,
+            availableToday,
+            availableNow,
+            nextSchedule.nextAvailableDate(),
+            nextSchedule.nextAvailableAt(),
+            scheduleResponses,
+            todayException
         );
     }
 
     /**
      * 오늘 배출 일정이 존재하는지 확인합니다.
      *
-     * 현재 배출 시간이 이미 지났더라도
-     * 오늘 일정 자체가 존재하면 true입니다.
+     * 오늘 ScheduleException이 있으면
+     * 정기 일정을 보지 않고 예외만 사용합니다.
      */
     private boolean isAvailableToday(
-            List<RecycleSchedule> schedules,
-            LocalDate referenceDate
+        List<RecycleSchedule> schedules,
+        ScheduleException todayException,
+        LocalDate referenceDate
     ) {
+        if (todayException != null) {
+            return isExceptionAvailableOnDate(
+                todayException
+            );
+        }
+
         DayOfWeek today =
-                referenceDate.getDayOfWeek();
+            referenceDate.getDayOfWeek();
 
         return schedules.stream()
-                .anyMatch(
-                        schedule ->
-                                schedule.isAlwaysAvailable()
-                                        || schedule.getDayOfWeek()
-                                        == today
-                );
+            .anyMatch(
+                schedule ->
+                    schedule.isAlwaysAvailable()
+                        || schedule.getDayOfWeek()
+                        == today
+            );
     }
 
     /**
-     * 현재 시각에 실제로 배출할 수 있는지 확인합니다.
+     * 현재 시각에 실제 배출할 수 있는지 계산합니다.
+     *
+     * 우선순위:
+     *
+     * 1. 오늘 ScheduleException
+     * 2. 어제 시작한 overnight 예외
+     * 3. 반복 RecycleSchedule
      */
     private boolean isAvailableNow(
-            List<RecycleSchedule> schedules,
-            LocalDateTime referenceDateTime
+        List<RecycleSchedule> schedules,
+        ScheduleException todayException,
+        ScheduleException yesterdayException,
+        LocalDateTime referenceDateTime
+    ) {
+        LocalTime currentTime =
+            referenceDateTime.toLocalTime();
+
+        /*
+         * 오늘 예외가 존재한다면
+         * 오늘의 정기 일정 전체를 덮어씁니다.
+         */
+        if (todayException != null) {
+            return isExceptionAvailableNowOnEffectiveDate(
+                todayException,
+                currentTime
+            );
+        }
+
+        /*
+         * 어제의 예외 일정이 자정을 넘어
+         * 현재 시각까지 이어지는 경우입니다.
+         */
+        if (
+            yesterdayException != null
+                && isOvernightContinuationAvailable(
+                yesterdayException,
+                currentTime
+            )
+        ) {
+            return true;
+        }
+
+        return isRegularScheduleAvailableNow(
+            schedules,
+            referenceDateTime
+        );
+    }
+
+    /**
+     * 예외 일정이 해당 날짜에
+     * 배출 가능한 형태인지 확인합니다.
+     */
+    private boolean isExceptionAvailableOnDate(
+        ScheduleException exception
+    ) {
+        if (exception.isUnavailable()) {
+            return false;
+        }
+
+        if (
+            Boolean.TRUE.equals(
+                exception.getAlwaysAvailable()
+            )
+        ) {
+            return true;
+        }
+
+        return exception.hasTimeWindow();
+    }
+
+    /**
+     * 예외 일정의 effectiveDate 당일에
+     * 현재 실제 배출 가능한지 확인합니다.
+     */
+    private boolean
+    isExceptionAvailableNowOnEffectiveDate(
+        ScheduleException exception,
+        LocalTime currentTime
+    ) {
+        if (exception.isUnavailable()) {
+            return false;
+        }
+
+        if (
+            Boolean.TRUE.equals(
+                exception.getAlwaysAvailable()
+            )
+        ) {
+            return true;
+        }
+
+        if (!exception.hasTimeWindow()) {
+            return false;
+        }
+
+        LocalTime startTime =
+            exception.getStartTime();
+
+        LocalTime endTime =
+            exception.getEndTime();
+
+        if (exception.isOvernight()) {
+            /*
+             * effectiveDate 당일에는
+             * 시작 시간 이후 구간만 해당합니다.
+             *
+             * 자정 이후 구간은 다음 날
+             * yesterdayException 계산에서 처리합니다.
+             */
+            return !currentTime.isBefore(
+                startTime
+            );
+        }
+
+        return !currentTime.isBefore(startTime)
+            && currentTime.isBefore(endTime);
+    }
+
+    /**
+     * 전날 시작한 overnight ScheduleException이
+     * 오늘 새벽까지 이어지는지 확인합니다.
+     */
+    private boolean
+    isOvernightContinuationAvailable(
+        ScheduleException exception,
+        LocalTime currentTime
+    ) {
+        if (
+            exception.isUnavailable()
+                || !exception.isOvernight()
+        ) {
+            return false;
+        }
+
+        return currentTime.isBefore(
+            exception.getEndTime()
+        );
+    }
+
+    /**
+     * ScheduleException이 없는 경우
+     * 기존 반복 일정으로 현재 배출 가능 여부를 계산합니다.
+     */
+    private boolean isRegularScheduleAvailableNow(
+        List<RecycleSchedule> schedules,
+        LocalDateTime referenceDateTime
     ) {
         DayOfWeek today =
-                referenceDateTime
-                        .getDayOfWeek();
+            referenceDateTime.getDayOfWeek();
 
         LocalTime currentTime =
-                referenceDateTime
-                        .toLocalTime();
+            referenceDateTime.toLocalTime();
 
         return schedules.stream()
-                .anyMatch(schedule -> {
-                    if (schedule.isAlwaysAvailable()) {
+            .anyMatch(
+                schedule -> {
+
+                    if (
+                        schedule.isAlwaysAvailable()
+                    ) {
                         return true;
                     }
 
-                    if (schedule.getDayOfWeek() != today) {
+                    if (
+                        schedule.getDayOfWeek()
+                            != today
+                    ) {
                         return false;
                     }
 
                     LocalTime startTime =
-                            schedule.getStartTime();
+                        schedule.getStartTime();
 
                     LocalTime endTime =
-                            schedule.getEndTime();
+                        schedule.getEndTime();
 
-                    /*
-                     * 시작 시간은 포함하고 종료 시간은 포함하지 않습니다.
-                     *
-                     * 예:
-                     * 18:00~22:00 일정이라면
-                     * 18:00은 가능, 22:00은 불가능합니다.
-                     */
                     boolean started =
-                            !currentTime.isBefore(
-                                    startTime
-                            );
+                        !currentTime.isBefore(
+                            startTime
+                        );
 
                     boolean notEnded =
-                            currentTime.isBefore(
-                                    endTime
-                            );
+                        currentTime.isBefore(
+                            endTime
+                        );
 
-                    return started && notEnded;
-                });
+                    return started
+                        && notEnded;
+                }
+            );
     }
 
     /**
-     * 현재 시각을 기준으로 가장 가까운 배출 일정을 계산합니다.
+     * 현재 시각 기준
+     * 가장 가까운 배출 가능 일정을 계산합니다.
+     *
+     * 특정 날짜에 ScheduleException이 존재하면
+     * 그 날짜의 정기 일정은 완전히 무시하고
+     * 예외 일정만 사용합니다.
      */
     private NextScheduleResult
     calculateNextSchedule(
-            List<RecycleSchedule> schedules,
-            LocalDateTime referenceDateTime
+        List<RecycleSchedule> schedules,
+        List<ScheduleException> exceptions,
+        LocalDateTime referenceDateTime
     ) {
-        if (schedules.isEmpty()) {
+        if (
+            schedules.isEmpty()
+                && exceptions.isEmpty()
+        ) {
             return NextScheduleResult.empty();
         }
 
-        boolean alwaysAvailable =
-                schedules.stream()
-                        .anyMatch(
-                                RecycleSchedule
-                                        ::isAlwaysAvailable
-                        );
+        LocalDate referenceDate =
+            referenceDateTime.toLocalDate();
 
-        if (alwaysAvailable) {
-            return new NextScheduleResult(
-                    referenceDateTime.toLocalDate(),
-                    null
+        /*
+         * 날짜별 예외를 빠르게 찾기 위한 Map입니다.
+         *
+         * DB Unique Constraint 때문에
+         * 같은 품목 + 날짜에는 하나의 예외만 존재합니다.
+         */
+        Map<LocalDate, ScheduleException>
+            exceptionByDate =
+            new HashMap<>();
+
+        for (ScheduleException exception : exceptions) {
+            exceptionByDate.put(
+                exception.getEffectiveDate(),
+                exception
             );
         }
 
-        LocalDateTime nearestSchedule = null;
+        /*
+         * 반복 일정은 최대 7일 안에 다시 나타납니다.
+         *
+         * 미래 예외가 존재한다면
+         * 마지막 예외 날짜 이후 7일까지 확인하면
+         * 모든 예외를 지나친 다음의 정기 일정도 찾을 수 있습니다.
+         */
+        LocalDate searchEndDate =
+            referenceDate.plusDays(7);
 
-        for (RecycleSchedule schedule : schedules) {
-            LocalDateTime candidate =
-                    calculateCandidateDateTime(
-                            schedule,
-                            referenceDateTime
-                    );
+        LocalDate lastExceptionDate =
+            exceptions.stream()
+                .map(
+                    ScheduleException::getEffectiveDate
+                )
+                .max(
+                    Comparator.naturalOrder()
+                )
+                .orElse(
+                    null
+                );
+
+        if (
+            lastExceptionDate != null
+                && lastExceptionDate.isAfter(
+                referenceDate
+            )
+        ) {
+            LocalDate afterLastException =
+                lastExceptionDate.plusDays(7);
 
             if (
-                    nearestSchedule == null
-                            || candidate.isBefore(
-                            nearestSchedule
-                    )
+                afterLastException.isAfter(
+                    searchEndDate
+                )
             ) {
-                nearestSchedule = candidate;
+                searchEndDate =
+                    afterLastException;
             }
         }
 
-        if (nearestSchedule == null) {
-            return NextScheduleResult.empty();
+        LocalDate candidateDate =
+            referenceDate;
+
+        while (
+            !candidateDate.isAfter(
+                searchEndDate
+            )
+        ) {
+            ScheduleException exception =
+                exceptionByDate.get(
+                    candidateDate
+                );
+
+            DayScheduleCandidate candidate;
+
+            if (exception != null) {
+                /*
+                 * 예외가 있는 날짜에는
+                 * 정기 일정을 절대 같이 사용하지 않습니다.
+                 */
+                candidate =
+                    buildExceptionCandidate(
+                        exception,
+                        candidateDate,
+                        referenceDateTime
+                    );
+            } else {
+                candidate =
+                    buildRegularCandidate(
+                        schedules,
+                        candidateDate,
+                        referenceDateTime
+                    );
+            }
+
+            if (candidate.available()) {
+                return new NextScheduleResult(
+                    candidateDate,
+                    candidate.availableAt()
+                );
+            }
+
+            candidateDate =
+                candidateDate.plusDays(1);
         }
 
-        return new NextScheduleResult(
-                nearestSchedule.toLocalDate(),
-                nearestSchedule
-        );
+        return NextScheduleResult.empty();
     }
 
     /**
-     * 주간 반복 일정 하나의 가장 가까운 날짜와 시간을 계산합니다.
+     * 특정 날짜 ScheduleException으로부터
+     * 다음 배출 후보를 만듭니다.
      */
-    private LocalDateTime
-    calculateCandidateDateTime(
-            RecycleSchedule schedule,
-            LocalDateTime referenceDateTime
+    private DayScheduleCandidate
+    buildExceptionCandidate(
+        ScheduleException exception,
+        LocalDate candidateDate,
+        LocalDateTime referenceDateTime
     ) {
-        LocalDate referenceDate =
-                referenceDateTime.toLocalDate();
+        if (exception.isUnavailable()) {
+            return DayScheduleCandidate.unavailable();
+        }
 
-        LocalTime referenceTime =
+        if (
+            Boolean.TRUE.equals(
+                exception.getAlwaysAvailable()
+            )
+        ) {
+            return DayScheduleCandidate.available(
+                null
+            );
+        }
+
+        if (!exception.hasTimeWindow()) {
+            return DayScheduleCandidate.unavailable();
+        }
+
+        LocalTime startTime =
+            exception.getStartTime();
+
+        LocalTime endTime =
+            exception.getEndTime();
+
+        if (
+            candidateDate.equals(
+                referenceDateTime.toLocalDate()
+            )
+        ) {
+            LocalTime currentTime =
                 referenceDateTime.toLocalTime();
 
-        DayOfWeek currentDay =
-                referenceDate.getDayOfWeek();
-
-        DayOfWeek scheduleDay =
-                schedule.getDayOfWeek();
-
-        int daysUntilSchedule =
-                (
-                        scheduleDay.getValue()
-                                - currentDay.getValue()
-                                + 7
-                ) % 7;
-
-        LocalDate candidateDate =
-                referenceDate.plusDays(
-                        daysUntilSchedule
-                );
-
-        /*
-         * 오늘 일정이지만 종료 시간이 지났다면
-         * 다음 주 같은 요일로 이동합니다.
-         */
-        if (
-                daysUntilSchedule == 0
-                        && !referenceTime.isBefore(
-                        schedule.getEndTime()
+            /*
+             * 일반 시간 범위에서 종료 시각이 지났다면
+             * 오늘 예외 일정은 이미 끝났습니다.
+             */
+            if (
+                !exception.isOvernight()
+                    && !currentTime.isBefore(
+                    endTime
                 )
-        ) {
-            candidateDate =
-                    candidateDate.plusDays(7);
+            ) {
+                return DayScheduleCandidate.unavailable();
+            }
         }
 
-        return candidateDate.atTime(
-                schedule.getStartTime()
+        return DayScheduleCandidate.available(
+            candidateDate.atTime(
+                startTime
+            )
         );
     }
 
     /**
-     * 로그인 사용자를 조회합니다.
+     * 특정 날짜에 적용되는
+     * 기존 반복 일정 후보를 계산합니다.
      */
-    private User getUser(
-            Long userId
+    private DayScheduleCandidate
+    buildRegularCandidate(
+        List<RecycleSchedule> schedules,
+        LocalDate candidateDate,
+        LocalDateTime referenceDateTime
     ) {
-        return userRepository
-                .findById(userId)
-                .orElseThrow(
-                        () -> new CustomException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
+        /*
+         * 상시 배출 일정이 하나라도 존재하면
+         * 예외가 없는 모든 날짜에 배출 가능합니다.
+         */
+        boolean alwaysAvailable =
+            schedules.stream()
+                .anyMatch(
+                    RecycleSchedule::isAlwaysAvailable
                 );
+
+        if (alwaysAvailable) {
+            return DayScheduleCandidate.available(
+                null
+            );
+        }
+
+        DayOfWeek candidateDay =
+            candidateDate.getDayOfWeek();
+
+        List<RecycleSchedule> daySchedules =
+            schedules.stream()
+                .filter(
+                    schedule ->
+                        schedule.getDayOfWeek()
+                            == candidateDay
+                )
+                .toList();
+
+        if (daySchedules.isEmpty()) {
+            return DayScheduleCandidate.unavailable();
+        }
+
+        LocalDateTime nearest =
+            null;
+
+        for (
+            RecycleSchedule schedule
+            : daySchedules
+        ) {
+            if (
+                candidateDate.equals(
+                    referenceDateTime.toLocalDate()
+                )
+                    && !referenceDateTime
+                    .toLocalTime()
+                    .isBefore(
+                        schedule.getEndTime()
+                    )
+            ) {
+                /*
+                 * 오늘 일정이 이미 종료된 경우
+                 * 이 일정은 다음 후보에서 제외합니다.
+                 */
+                continue;
+            }
+
+            LocalDateTime candidate =
+                candidateDate.atTime(
+                    schedule.getStartTime()
+                );
+
+            if (
+                nearest == null
+                    || candidate.isBefore(
+                    nearest
+                )
+            ) {
+                nearest = candidate;
+            }
+        }
+
+        if (nearest == null) {
+            return DayScheduleCandidate.unavailable();
+        }
+
+        return DayScheduleCandidate.available(
+            nearest
+        );
     }
 
     /**
-     * 사용자가 설정한 거주 아파트를 조회합니다.
+     * 특정 날짜의 ScheduleException을 찾습니다.
+     */
+    private ScheduleException findException(
+        List<ScheduleException> exceptions,
+        LocalDate date
+    ) {
+        return exceptions.stream()
+            .filter(
+                exception ->
+                    Objects.equals(
+                        exception.getEffectiveDate(),
+                        date
+                    )
+            )
+            .findFirst()
+            .orElse(
+                null
+            );
+    }
+
+    /**
+     * 특정 품목의 예외 일정 조회
+     *
+     * 전날 overnight 예외까지 계산하기 위해
+     * 기준 날짜 하루 전부터 조회합니다.
+     */
+    private List<ScheduleException>
+    getWasteItemExceptions(
+        Long apartmentId,
+        Long wasteItemId,
+        LocalDate referenceDate
+    ) {
+        return scheduleExceptionRepository
+            .findAllByApartmentIdAndWasteItemIdAndEffectiveDateGreaterThanEqualOrderByEffectiveDateAsc(
+                apartmentId,
+                wasteItemId,
+                referenceDate.minusDays(1)
+            );
+    }
+
+    /**
+     * 로그인 사용자 조회
+     */
+    private User getUser(
+        Long userId
+    ) {
+        return userRepository
+            .findById(
+                userId
+            )
+            .orElseThrow(
+                () ->
+                    new CustomException(
+                        ErrorCode.USER_NOT_FOUND
+                    )
+            );
+    }
+
+    /**
+     * 사용자가 설정한 승인된 거주 아파트 조회
      */
     private Apartment getUserApartment(
-            User user
+        User user
     ) {
         Apartment apartment =
-                user.getApartment();
+            user.getApartment();
 
         if (apartment == null) {
             throw new CustomException(
-                    ErrorCode.USER_APARTMENT_NOT_SET
+                ErrorCode.USER_APARTMENT_NOT_SET
             );
         }
 
         if (
-                apartment.getStatus()
-                        != ApartmentStatus.APPROVED
+            apartment.getStatus()
+                != ApartmentStatus.APPROVED
         ) {
             throw new CustomException(
-                    ErrorCode.APARTMENT_NOT_APPROVED
+                ErrorCode.APARTMENT_NOT_APPROVED
             );
         }
 
@@ -492,27 +1033,29 @@ public class RecycleScheduleQueryService {
     }
 
     /**
-     * 승인된 아파트를 조회합니다.
+     * 승인된 아파트 조회
      */
     private Apartment getApprovedApartment(
-            Long apartmentId
+        Long apartmentId
     ) {
         Apartment apartment =
-                apartmentRepository
-                        .findById(apartmentId)
-                        .orElseThrow(
-                                () -> new CustomException(
-                                        ErrorCode
-                                                .APARTMENT_NOT_FOUND
-                                )
-                        );
+            apartmentRepository
+                .findById(
+                    apartmentId
+                )
+                .orElseThrow(
+                    () ->
+                        new CustomException(
+                            ErrorCode.APARTMENT_NOT_FOUND
+                        )
+                );
 
         if (
-                apartment.getStatus()
-                        != ApartmentStatus.APPROVED
+            apartment.getStatus()
+                != ApartmentStatus.APPROVED
         ) {
             throw new CustomException(
-                    ErrorCode.APARTMENT_NOT_APPROVED
+                ErrorCode.APARTMENT_NOT_APPROVED
             );
         }
 
@@ -520,38 +1063,67 @@ public class RecycleScheduleQueryService {
     }
 
     /**
-     * 일반 사용자에게 노출 가능한 활성 품목을 조회합니다.
+     * 일반 사용자에게 노출 가능한
+     * 활성 폐기물 품목 조회
      */
     private WasteItem getActiveWasteItem(
-            Long wasteItemId
+        Long wasteItemId
     ) {
         return wasteItemRepository
-                .findByIdAndActiveTrue(
-                        wasteItemId
-                )
-                .orElseThrow(
-                        () -> new CustomException(
-                                ErrorCode
-                                        .WASTE_ITEM_NOT_FOUND
-                        )
-                );
+            .findByIdAndActiveTrue(
+                wasteItemId
+            )
+            .orElseThrow(
+                () ->
+                    new CustomException(
+                        ErrorCode.WASTE_ITEM_NOT_FOUND
+                    )
+            );
     }
 
     /**
-     * 다음 배출 일정 계산 결과를
-     * 내부에서 전달하기 위한 값 객체입니다.
+     * 특정 날짜의 배출 후보 계산 결과입니다.
+     */
+    private record DayScheduleCandidate(
+
+        boolean available,
+
+        LocalDateTime availableAt
+
+    ) {
+
+        private static DayScheduleCandidate available(
+            LocalDateTime availableAt
+        ) {
+            return new DayScheduleCandidate(
+                true,
+                availableAt
+            );
+        }
+
+        private static DayScheduleCandidate unavailable() {
+            return new DayScheduleCandidate(
+                false,
+                null
+            );
+        }
+    }
+
+    /**
+     * 최종 다음 배출 일정 계산 결과입니다.
      */
     private record NextScheduleResult(
 
-            LocalDate nextAvailableDate,
-            LocalDateTime nextAvailableAt
+        LocalDate nextAvailableDate,
+
+        LocalDateTime nextAvailableAt
 
     ) {
 
         private static NextScheduleResult empty() {
             return new NextScheduleResult(
-                    null,
-                    null
+                null,
+                null
             );
         }
     }

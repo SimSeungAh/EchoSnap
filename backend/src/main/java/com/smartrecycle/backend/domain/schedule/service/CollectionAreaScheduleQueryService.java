@@ -7,7 +7,9 @@ import com.smartrecycle.backend.domain.residence.entity.ResidenceCollectionArea;
 import com.smartrecycle.backend.domain.schedule.dto.response.GeneralHousingScheduleResponse;
 import com.smartrecycle.backend.domain.schedule.dto.response.GeneralHousingWasteScheduleResponse;
 import com.smartrecycle.backend.domain.schedule.entity.CollectionAreaSchedule;
+import com.smartrecycle.backend.domain.schedule.entity.ScheduleException;
 import com.smartrecycle.backend.domain.schedule.repository.CollectionAreaScheduleRepository;
+import com.smartrecycle.backend.domain.schedule.repository.ScheduleExceptionRepository;
 import com.smartrecycle.backend.domain.user.entity.ResidenceType;
 import com.smartrecycle.backend.domain.user.entity.User;
 import com.smartrecycle.backend.domain.user.repository.UserRepository;
@@ -22,11 +24,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -36,12 +40,6 @@ import java.util.regex.Pattern;
 @Transactional(readOnly = true)
 public class CollectionAreaScheduleQueryService {
 
-  /**
-   * 월요일부터 일요일까지의 순서를
-   * 명시적으로 관리합니다.
-   *
-   * 월~금 같은 범위 표현을 해석할 때 사용합니다.
-   */
   private static final List<DayOfWeek> WEEK_ORDER =
       List.of(
           DayOfWeek.MONDAY,
@@ -53,12 +51,6 @@ public class CollectionAreaScheduleQueryService {
           DayOfWeek.SUNDAY
       );
 
-  /**
-   * 월~금
-   * 월-금
-   * 토∼일
-   * 같은 요일 범위를 찾습니다.
-   */
   private static final Pattern DAY_RANGE_PATTERN =
       Pattern.compile(
           "([월화수목금토일])"
@@ -71,10 +63,13 @@ public class CollectionAreaScheduleQueryService {
   private final CollectionAreaScheduleRepository
       collectionAreaScheduleRepository;
 
+  private final ScheduleExceptionRepository
+      scheduleExceptionRepository;
+
   /**
    * 로그인한 일반주택 사용자의
    * 생활쓰레기 / 음식물 / 재활용품
-   * 전체 지역 배출 일정을 조회합니다.
+   * 전체 일정을 조회합니다.
    */
   public GeneralHousingScheduleResponse
   getMyGeneralHousingSchedule(
@@ -93,10 +88,6 @@ public class CollectionAreaScheduleQueryService {
     LocalDateTime referenceDateTime =
         LocalDateTime.now();
 
-    /*
-     * Residence에 현재 연결되어 있는
-     * 폐기물 종류별 CollectionArea를 Map으로 변환합니다.
-     */
     Map<
         CollectionWasteType,
         ResidenceCollectionArea
@@ -116,7 +107,8 @@ public class CollectionAreaScheduleQueryService {
     }
 
     /*
-     * 연결된 CollectionArea ID를 한 번에 모읍니다.
+     * Residence에 연결된 CollectionArea ID를
+     * 중복 없이 모읍니다.
      */
     List<Long> collectionAreaIds =
         mappingsByWasteType
@@ -132,8 +124,7 @@ public class CollectionAreaScheduleQueryService {
             .toList();
 
     /*
-     * 한 Residence에 최대 세 종류의 CollectionArea가
-     * 연결될 수 있으므로 일정도 한 번에 조회합니다.
+     * 정기 일정 한 번에 조회
      */
     List<CollectionAreaSchedule> schedules =
         collectionAreaIds.isEmpty()
@@ -141,6 +132,29 @@ public class CollectionAreaScheduleQueryService {
             : collectionAreaScheduleRepository
             .findAllByCollectionAreaIdIn(
                 collectionAreaIds
+            );
+
+    /*
+     * 전날 시작한 overnight 예외가
+     * 오늘 새벽까지 이어질 수 있으므로
+     * 어제 날짜부터 예외를 조회합니다.
+     */
+    LocalDate exceptionStartDate =
+        referenceDateTime
+            .toLocalDate()
+            .minusDays(1);
+
+    /*
+     * 일반주택의 최대 세 수거구역에 대한
+     * 예외를 한 번에 조회합니다.
+     */
+    List<ScheduleException> exceptions =
+        collectionAreaIds.isEmpty()
+            ? List.of()
+            : scheduleExceptionRepository
+            .findAllByCollectionAreaIdInAndEffectiveDateGreaterThanEqualOrderByEffectiveDateAsc(
+                collectionAreaIds,
+                exceptionStartDate
             );
 
     Map<ScheduleKey, CollectionAreaSchedule>
@@ -162,16 +176,53 @@ public class CollectionAreaScheduleQueryService {
       );
     }
 
+    /*
+     * CollectionArea + CollectionWasteType별로
+     * ScheduleException을 그룹화합니다.
+     */
+    Map<ScheduleKey, List<ScheduleException>>
+        exceptionsByKey =
+        new HashMap<>();
+
+    for (
+        ScheduleException exception
+        : exceptions
+    ) {
+      if (
+          exception.getCollectionArea() == null
+              || exception.getCollectionWasteType()
+              == null
+      ) {
+        continue;
+      }
+
+      ScheduleKey key =
+          new ScheduleKey(
+              exception
+                  .getCollectionArea()
+                  .getId(),
+              exception
+                  .getCollectionWasteType()
+          );
+
+      exceptionsByKey
+          .computeIfAbsent(
+              key,
+              ignored ->
+                  new ArrayList<>()
+          )
+          .add(
+              exception
+          );
+    }
+
     List<GeneralHousingWasteScheduleResponse>
         responses =
         new ArrayList<>();
 
     /*
-     * 매칭이 없는 종류도 응답에서 제외하지 않습니다.
-     *
-     * Flutter가 항상
-     * 생활 / 음식물 / 재활용
-     * 세 영역을 안정적으로 그릴 수 있도록 합니다.
+     * 매칭되지 않은 폐기물 종류도
+     * 응답에서 제외하지 않습니다.
      */
     for (
         CollectionWasteType wasteType
@@ -196,20 +247,56 @@ public class CollectionAreaScheduleQueryService {
       CollectionArea collectionArea =
           mapping.getCollectionArea();
 
-      CollectionAreaSchedule schedule =
-          schedulesByKey.get(
-              new ScheduleKey(
-                  collectionArea.getId(),
-                  wasteType
-              )
+      ScheduleKey key =
+          new ScheduleKey(
+              collectionArea.getId(),
+              wasteType
           );
 
+      CollectionAreaSchedule schedule =
+          schedulesByKey.get(
+              key
+          );
+
+      List<ScheduleException> wasteExceptions =
+          exceptionsByKey.getOrDefault(
+              key,
+              List.of()
+          );
+
+      ScheduleException todayException =
+          findException(
+              wasteExceptions,
+              referenceDateTime
+                  .toLocalDate()
+          );
+
+      /*
+       * 정기 일정이 없더라도
+       * 특정 날짜의 공식 예외 정보가 존재하면
+       * 그 예외 자체는 사용자에게 보여줄 수 있습니다.
+       */
       if (schedule == null) {
+        ExceptionOnlyResult exceptionResult =
+            calculateExceptionOnlyResult(
+                wasteExceptions,
+                referenceDateTime
+            );
+
         responses.add(
             GeneralHousingWasteScheduleResponse
                 .matchedWithoutSchedule(
                     wasteType,
-                    collectionArea
+                    collectionArea,
+                    exceptionResult
+                        .availableToday(),
+                    exceptionResult
+                        .availableNow(),
+                    exceptionResult
+                        .nextAvailableDate(),
+                    exceptionResult
+                        .nextAvailableAt(),
+                    todayException
                 )
         );
 
@@ -224,6 +311,7 @@ public class CollectionAreaScheduleQueryService {
       boolean availableToday =
           isAvailableToday(
               dayParseResult,
+              todayException,
               referenceDateTime
                   .toLocalDate()
           );
@@ -232,6 +320,7 @@ public class CollectionAreaScheduleQueryService {
           isAvailableNow(
               schedule,
               dayParseResult,
+              wasteExceptions,
               referenceDateTime
           );
 
@@ -239,6 +328,7 @@ public class CollectionAreaScheduleQueryService {
           calculateNextSchedule(
               schedule,
               dayParseResult,
+              wasteExceptions,
               referenceDateTime,
               availableNow
           );
@@ -248,13 +338,15 @@ public class CollectionAreaScheduleQueryService {
               wasteType,
               collectionArea,
               schedule,
-              dayParseResult.interpretable(),
+              dayParseResult
+                  .interpretable(),
               availableToday,
               availableNow,
               nextSchedule
                   .nextAvailableDate(),
               nextSchedule
-                  .nextAvailableAt()
+                  .nextAvailableAt(),
+              todayException
           )
       );
     }
@@ -266,23 +358,12 @@ public class CollectionAreaScheduleQueryService {
     );
   }
 
-  /**
-   * 공공데이터의 배출요일 문자열을
-   * Java DayOfWeek 집합으로 변환합니다.
-   *
-   * 지원 예:
-   *
-   * 일+화+목
-   * 월,수,금
-   * 월~금
-   * 매주 화, 목
-   * 매일
-   * 평일
-   * 주말
-   *
-   * "주 3회"처럼 정확한 요일이 없는 표현은
-   * 억지로 추측하지 않고 interpretable=false로 둡니다.
+  /*
+   * =========================================================
+   * 요일 문자열 파싱
+   * =========================================================
    */
+
   private DayParseResult parseEmissionDays(
       String emissionDays
   ) {
@@ -290,7 +371,8 @@ public class CollectionAreaScheduleQueryService {
         emissionDays == null
             || emissionDays.isBlank()
     ) {
-      return DayParseResult.uninterpretable();
+      return DayParseResult
+          .uninterpretable();
     }
 
     String normalized =
@@ -304,9 +386,6 @@ public class CollectionAreaScheduleQueryService {
                 ""
             );
 
-    /*
-     * 매일 / 상시는 모든 요일로 해석합니다.
-     */
     if (
         normalized.contains("매일")
             || normalized.contains("상시")
@@ -324,9 +403,6 @@ public class CollectionAreaScheduleQueryService {
             DayOfWeek.class
         );
 
-    /*
-     * 평일은 월~금입니다.
-     */
     if (normalized.contains("평일")) {
       result.add(
           DayOfWeek.MONDAY
@@ -351,13 +427,11 @@ public class CollectionAreaScheduleQueryService {
           );
     }
 
-    /*
-     * 주말은 토/일입니다.
-     */
     if (normalized.contains("주말")) {
       result.add(
           DayOfWeek.SATURDAY
       );
+
       result.add(
           DayOfWeek.SUNDAY
       );
@@ -375,9 +449,6 @@ public class CollectionAreaScheduleQueryService {
             ""
         );
 
-    /*
-     * 월~금 같은 범위를 해석합니다.
-     */
     Matcher rangeMatcher =
         DAY_RANGE_PATTERN.matcher(
             normalized
@@ -401,10 +472,6 @@ public class CollectionAreaScheduleQueryService {
       );
     }
 
-    /*
-     * + , / · 등의 구분자를 기준으로
-     * 개별 요일을 해석합니다.
-     */
     String[] tokens =
         normalized.split(
             "[+,/·ㆍ;|]"
@@ -418,7 +485,8 @@ public class CollectionAreaScheduleQueryService {
     }
 
     if (result.isEmpty()) {
-      return DayParseResult.uninterpretable();
+      return DayParseResult
+          .uninterpretable();
     }
 
     return new DayParseResult(
@@ -427,13 +495,6 @@ public class CollectionAreaScheduleQueryService {
     );
   }
 
-  /**
-   * 단일 요일 또는
-   * "월수금"처럼 붙어 있는 표현을 처리합니다.
-   *
-   * "격일", "주3회"처럼 다른 문자가 섞인 표현은
-   * 자동 추측하지 않습니다.
-   */
   private void addDayToken(
       Set<DayOfWeek> result,
       String token
@@ -445,10 +506,6 @@ public class CollectionAreaScheduleQueryService {
       return;
     }
 
-    /*
-     * 월~금 같은 범위 표현은
-     * 앞 단계에서 이미 처리했습니다.
-     */
     if (
         token.contains("~")
             || token.contains("∼")
@@ -465,13 +522,9 @@ public class CollectionAreaScheduleQueryService {
         );
 
     /*
-     * 정확히 요일 문자만으로 이루어진 경우만
-     * 자동 해석합니다.
-     *
-     * 예:
-     * 월
-     * 월수금
-     * 일화목
+     * 주3회, 격일처럼
+     * 정확한 요일을 알 수 없는 값은
+     * 추측하지 않습니다.
      */
     if (
         !cleaned.matches(
@@ -504,12 +557,6 @@ public class CollectionAreaScheduleQueryService {
     }
   }
 
-  /**
-   * 월~금처럼 범위로 작성된 요일을
-   * 실제 요일 집합에 추가합니다.
-   *
-   * 토~월처럼 주 경계를 넘어가는 표현도 처리합니다.
-   */
   private void addDayRange(
       Set<DayOfWeek> result,
       DayOfWeek startDay,
@@ -530,10 +577,6 @@ public class CollectionAreaScheduleQueryService {
     int currentIndex =
         startIndex;
 
-    /*
-     * 최대 일주일만 반복하여
-     * 잘못된 데이터로 무한 루프가 생기지 않게 합니다.
-     */
     for (
         int count = 0;
         count < WEEK_ORDER.size();
@@ -560,10 +603,6 @@ public class CollectionAreaScheduleQueryService {
     }
   }
 
-  /**
-   * 한국어 한 글자 요일을
-   * Java DayOfWeek로 변환합니다.
-   */
   private DayOfWeek toDayOfWeek(
       String value
   ) {
@@ -583,16 +622,27 @@ public class CollectionAreaScheduleQueryService {
     };
   }
 
+  /*
+   * =========================================================
+   * 오늘 일정 계산
+   * =========================================================
+   */
+
   /**
-   * 오늘 시작하는 배출 일정이 존재하는지 확인합니다.
-   *
-   * 자정을 넘기는 전날 일정이 현재까지 이어지는 것은
-   * availableNow에서 별도로 처리합니다.
+   * 오늘 ScheduleException이 존재하면
+   * 반복 일정보다 무조건 우선합니다.
    */
   private boolean isAvailableToday(
       DayParseResult dayParseResult,
+      ScheduleException todayException,
       LocalDate referenceDate
   ) {
+    if (todayException != null) {
+      return isExceptionAvailableOnDate(
+          todayException
+      );
+    }
+
     if (!dayParseResult.interpretable()) {
       return false;
     }
@@ -606,27 +656,99 @@ public class CollectionAreaScheduleQueryService {
   }
 
   /**
-   * 현재 시각에 실제로 배출 가능한지 계산합니다.
+   * 현재 배출 가능 여부입니다.
    *
-   * 일반 일정:
-   * 18:00 ~ 22:00
+   * 우선순위:
    *
-   * 자정 넘김:
-   * 20:00 ~ 02:00
-   *
-   * 수요일 01:00이라면
-   * 화요일 20:00에 시작한 일정도 확인합니다.
+   * 1. 오늘 ScheduleException
+   * 2. 전날 ScheduleException의 overnight 연장
+   * 3. 오늘 시작한 정기 일정
+   * 4. 전날 시작한 정기 overnight 일정
    */
   private boolean isAvailableNow(
       CollectionAreaSchedule schedule,
       DayParseResult dayParseResult,
+      List<ScheduleException> exceptions,
       LocalDateTime referenceDateTime
   ) {
-    if (!dayParseResult.interpretable()) {
-      return false;
+    LocalDate today =
+        referenceDateTime
+            .toLocalDate();
+
+    LocalTime currentTime =
+        referenceDateTime
+            .toLocalTime();
+
+    ScheduleException todayException =
+        findException(
+            exceptions,
+            today
+        );
+
+    ScheduleException yesterdayException =
+        findException(
+            exceptions,
+            today.minusDays(1)
+        );
+
+    /*
+     * 오늘 예외가 존재하면
+     * 오늘에 적용되는 정기 일정 전체를 덮어씁니다.
+     */
+    if (todayException != null) {
+      return isExceptionAvailableNowOnEffectiveDate(
+          todayException,
+          currentTime
+      );
     }
 
-    if (!schedule.hasTimeWindow()) {
+    boolean currentDayRegular =
+        isCurrentDayRegularAvailableNow(
+            schedule,
+            dayParseResult,
+            referenceDateTime
+        );
+
+    boolean previousDayContinuation;
+
+    /*
+     * 전날 ScheduleException이 있었다면
+     * 전날 정기 일정은 이미 예외에 의해 덮어써졌습니다.
+     *
+     * 따라서 전날 regular overnight을 같이 적용하면 안 됩니다.
+     */
+    if (yesterdayException != null) {
+      previousDayContinuation =
+          isExceptionOvernightContinuationAvailable(
+              yesterdayException,
+              currentTime
+          );
+    } else {
+      previousDayContinuation =
+          isRegularOvernightContinuationAvailable(
+              schedule,
+              dayParseResult,
+              referenceDateTime
+          );
+    }
+
+    return currentDayRegular
+        || previousDayContinuation;
+  }
+
+  /**
+   * 오늘 시작한 정기 일정의
+   * 현재 시간 범위를 확인합니다.
+   */
+  private boolean isCurrentDayRegularAvailableNow(
+      CollectionAreaSchedule schedule,
+      DayParseResult dayParseResult,
+      LocalDateTime referenceDateTime
+  ) {
+    if (
+        !dayParseResult.interpretable()
+            || !schedule.hasTimeWindow()
+    ) {
       return false;
     }
 
@@ -636,11 +758,21 @@ public class CollectionAreaScheduleQueryService {
     LocalTime endTime =
         schedule.getEndTime();
 
-    /*
-     * 시작과 종료가 같은 경우를
-     * 24시간 일정이라고 임의로 추측하지 않습니다.
-     */
     if (startTime.equals(endTime)) {
+      return false;
+    }
+
+    DayOfWeek today =
+        referenceDateTime
+            .getDayOfWeek();
+
+    if (
+        !dayParseResult
+            .days()
+            .contains(
+                today
+            )
+    ) {
       return false;
     }
 
@@ -648,87 +780,162 @@ public class CollectionAreaScheduleQueryService {
         referenceDateTime
             .toLocalTime();
 
-    DayOfWeek today =
-        referenceDateTime
-            .getDayOfWeek();
-
-    /*
-     * 18:00 ~ 22:00 같은 일반 일정
-     */
-    if (!schedule.isOvernight()) {
-      if (
-          !dayParseResult
-              .days()
-              .contains(today)
-      ) {
-        return false;
-      }
-
+    if (schedule.isOvernight()) {
+      /*
+       * 20:00~02:00의 오늘 시작 구간은
+       * 20:00 이후입니다.
+       *
+       * 02:00 이전은 전날 시작 일정에서 처리합니다.
+       */
       return !currentTime.isBefore(
           startTime
-      )
-          && currentTime.isBefore(
-          endTime
       );
     }
 
-    /*
-     * 20:00 ~ 02:00 같은 자정 넘김 일정
-     *
-     * 20:00 이후라면 오늘 시작 일정 확인
-     */
-    if (
-        !currentTime.isBefore(
-            startTime
-        )
-    ) {
-      return dayParseResult
-          .days()
-          .contains(
-              today
-          );
-    }
-
-    /*
-     * 02:00 이전이라면
-     * 전날 시작된 일정인지 확인
-     */
-    if (
-        currentTime.isBefore(
-            endTime
-        )
-    ) {
-      DayOfWeek previousDay =
-          today.minus(1);
-
-      return dayParseResult
-          .days()
-          .contains(
-              previousDay
-          );
-    }
-
-    return false;
+    return !currentTime.isBefore(
+        startTime
+    )
+        && currentTime.isBefore(
+        endTime
+    );
   }
 
   /**
-   * 현재 시각 기준으로
-   * 가장 가까운 다음 배출 기회를 계산합니다.
+   * 전날 시작한 정기 overnight 일정이
+   * 오늘 새벽까지 이어지는지 확인합니다.
    */
+  private boolean isRegularOvernightContinuationAvailable(
+      CollectionAreaSchedule schedule,
+      DayParseResult dayParseResult,
+      LocalDateTime referenceDateTime
+  ) {
+    if (
+        !dayParseResult.interpretable()
+            || !schedule.hasTimeWindow()
+            || !schedule.isOvernight()
+    ) {
+      return false;
+    }
+
+    LocalTime currentTime =
+        referenceDateTime
+            .toLocalTime();
+
+    if (
+        !currentTime.isBefore(
+            schedule.getEndTime()
+        )
+    ) {
+      return false;
+    }
+
+    DayOfWeek previousDay =
+        referenceDateTime
+            .getDayOfWeek()
+            .minus(1);
+
+    return dayParseResult
+        .days()
+        .contains(
+            previousDay
+        );
+  }
+
+  /*
+   * =========================================================
+   * ScheduleException 계산
+   * =========================================================
+   */
+
+  private boolean isExceptionAvailableOnDate(
+      ScheduleException exception
+  ) {
+    if (exception.isUnavailable()) {
+      return false;
+    }
+
+    return exception.hasTimeWindow()
+        || Boolean.TRUE.equals(
+        exception.getAlwaysAvailable()
+    );
+  }
+
+  /**
+   * effectiveDate 당일의 예외 시간입니다.
+   */
+  private boolean
+  isExceptionAvailableNowOnEffectiveDate(
+      ScheduleException exception,
+      LocalTime currentTime
+  ) {
+    if (exception.isUnavailable()) {
+      return false;
+    }
+
+    if (
+        Boolean.TRUE.equals(
+            exception.getAlwaysAvailable()
+        )
+    ) {
+      return true;
+    }
+
+    if (!exception.hasTimeWindow()) {
+      return false;
+    }
+
+    if (exception.isOvernight()) {
+      return !currentTime.isBefore(
+          exception.getStartTime()
+      );
+    }
+
+    return !currentTime.isBefore(
+        exception.getStartTime()
+    )
+        && currentTime.isBefore(
+        exception.getEndTime()
+    );
+  }
+
+  /**
+   * 전날 예외가
+   * 오늘 새벽까지 이어지는 경우입니다.
+   */
+  private boolean
+  isExceptionOvernightContinuationAvailable(
+      ScheduleException exception,
+      LocalTime currentTime
+  ) {
+    if (
+        exception.isUnavailable()
+            || !exception.isOvernight()
+    ) {
+      return false;
+    }
+
+    return currentTime.isBefore(
+        exception.getEndTime()
+    );
+  }
+
+  /*
+   * =========================================================
+   * 다음 일정 계산
+   * =========================================================
+   */
+
   private NextScheduleResult
   calculateNextSchedule(
       CollectionAreaSchedule schedule,
       DayParseResult dayParseResult,
+      List<ScheduleException> exceptions,
       LocalDateTime referenceDateTime,
       boolean availableNow
   ) {
-    if (!dayParseResult.interpretable()) {
-      return NextScheduleResult.empty();
-    }
-
     /*
-     * 이미 현재 배출 가능한 상태라면
-     * 다음 가능 시점을 '현재'로 반환합니다.
+     * 지금 배출 가능한 상태면
+     * 가장 가까운 가능 시점은 현재입니다.
      */
     if (availableNow) {
       return new NextScheduleResult(
@@ -738,108 +945,417 @@ public class CollectionAreaScheduleQueryService {
       );
     }
 
-    LocalTime startTime =
-        schedule.getStartTime();
+    Map<LocalDate, ScheduleException>
+        exceptionByDate =
+        new HashMap<>();
 
-    /*
-     * 정확한 시작 시간이 없는 경우에는
-     * 다음 배출 날짜까지만 계산합니다.
-     */
-    if (startTime == null) {
-      LocalDate nextDate =
-          findNextScheduledDate(
-              dayParseResult.days(),
-              referenceDateTime
-                  .toLocalDate()
-          );
-
-      return new NextScheduleResult(
-          nextDate,
-          null
+    for (
+        ScheduleException exception
+        : exceptions
+    ) {
+      exceptionByDate.put(
+          exception.getEffectiveDate(),
+          exception
       );
     }
 
+    LocalDate referenceDate =
+        referenceDateTime
+            .toLocalDate();
+
     /*
-     * 오늘부터 다음 주 같은 요일까지
-     * 최대 7일 뒤까지 확인합니다.
+     * 기본적으로 반복 규칙은 7일 안에 다시 옵니다.
      */
-    for (
-        int daysLater = 0;
-        daysLater <= 7;
-        daysLater++
-    ) {
-      LocalDate candidateDate =
-          referenceDateTime
-              .toLocalDate()
-              .plusDays(
-                  daysLater
-              );
+    LocalDate searchEndDate =
+        referenceDate.plusDays(7);
+
+    /*
+     * 미래 예외가 여러 주 연속 존재할 수 있으므로
+     * 마지막 예외 날짜 + 7일까지 확인합니다.
+     */
+    LocalDate lastExceptionDate =
+        exceptions.stream()
+            .map(
+                ScheduleException::getEffectiveDate
+            )
+            .filter(
+                date ->
+                    !date.isBefore(
+                        referenceDate
+                    )
+            )
+            .max(
+                Comparator.naturalOrder()
+            )
+            .orElse(
+                null
+            );
+
+    if (lastExceptionDate != null) {
+      LocalDate afterLastException =
+          lastExceptionDate.plusDays(7);
 
       if (
-          !dayParseResult
-              .days()
-              .contains(
-                  candidateDate
-                      .getDayOfWeek()
-              )
-      ) {
-        continue;
-      }
-
-      LocalDateTime candidateDateTime =
-          candidateDate.atTime(
-              startTime
-          );
-
-      if (
-          !candidateDateTime.isBefore(
-              referenceDateTime
+          afterLastException.isAfter(
+              searchEndDate
           )
       ) {
+        searchEndDate =
+            afterLastException;
+      }
+    }
+
+    LocalDate candidateDate =
+        referenceDate;
+
+    while (
+        !candidateDate.isAfter(
+            searchEndDate
+        )
+    ) {
+      ScheduleException exception =
+          exceptionByDate.get(
+              candidateDate
+          );
+
+      DayScheduleCandidate candidate;
+
+      if (exception != null) {
+        /*
+         * 예외가 있는 날짜에는
+         * 정기 일정을 절대로 함께 적용하지 않습니다.
+         */
+        candidate =
+            buildExceptionCandidate(
+                exception,
+                candidateDate,
+                referenceDateTime
+            );
+      } else {
+        candidate =
+            buildRegularCandidate(
+                schedule,
+                dayParseResult,
+                candidateDate,
+                referenceDateTime
+            );
+      }
+
+      if (candidate.available()) {
         return new NextScheduleResult(
             candidateDate,
-            candidateDateTime
+            candidate.availableAt()
         );
       }
+
+      candidateDate =
+          candidateDate.plusDays(1);
     }
 
     return NextScheduleResult.empty();
   }
 
   /**
-   * 시간이 없는 일정의
-   * 가장 가까운 다음 요일을 찾습니다.
+   * 특정 날짜 예외를
+   * 다음 배출 후보로 변환합니다.
    */
-  private LocalDate findNextScheduledDate(
-      Set<DayOfWeek> days,
-      LocalDate referenceDate
+  private DayScheduleCandidate
+  buildExceptionCandidate(
+      ScheduleException exception,
+      LocalDate candidateDate,
+      LocalDateTime referenceDateTime
   ) {
-    for (
-        int daysLater = 0;
-        daysLater <= 7;
-        daysLater++
-    ) {
-      LocalDate candidate =
-          referenceDate.plusDays(
-              daysLater
-          );
-
-      if (
-          days.contains(
-              candidate
-                  .getDayOfWeek()
-          )
-      ) {
-        return candidate;
-      }
+    if (exception.isUnavailable()) {
+      return DayScheduleCandidate
+          .unavailable();
     }
 
-    return null;
+    if (
+        Boolean.TRUE.equals(
+            exception.getAlwaysAvailable()
+        )
+    ) {
+      return DayScheduleCandidate
+          .available(
+              null
+          );
+    }
+
+    if (!exception.hasTimeWindow()) {
+      return DayScheduleCandidate
+          .unavailable();
+    }
+
+    LocalDateTime startDateTime =
+        candidateDate.atTime(
+            exception.getStartTime()
+        );
+
+    /*
+     * 오늘 일정인데 시작 시간이 이미 지났더라도
+     * availableNow라면 위에서 현재 시각으로 이미 반환됐습니다.
+     *
+     * availableNow가 false인데 시작까지 지났다면
+     * 오늘 이 예외 일정의 기회는 끝난 것입니다.
+     */
+    if (
+        candidateDate.equals(
+            referenceDateTime.toLocalDate()
+        )
+            && startDateTime.isBefore(
+            referenceDateTime
+        )
+    ) {
+      /*
+       * overnight 일정의 경우
+       * 새벽 이후 오늘 저녁에 다시 시작하는
+       * effectiveDate 일정은 startDateTime이
+       * 아직 미래라 여기에 걸리지 않습니다.
+       */
+      return DayScheduleCandidate
+          .unavailable();
+    }
+
+    return DayScheduleCandidate
+        .available(
+            startDateTime
+        );
   }
 
   /**
-   * 로그인 사용자를 조회합니다.
+   * 정기 CollectionAreaSchedule을
+   * 특정 날짜 후보로 변환합니다.
    */
+  private DayScheduleCandidate
+  buildRegularCandidate(
+      CollectionAreaSchedule schedule,
+      DayParseResult dayParseResult,
+      LocalDate candidateDate,
+      LocalDateTime referenceDateTime
+  ) {
+    if (!dayParseResult.interpretable()) {
+      return DayScheduleCandidate
+          .unavailable();
+    }
+
+    if (
+        !dayParseResult
+            .days()
+            .contains(
+                candidateDate
+                    .getDayOfWeek()
+            )
+    ) {
+      return DayScheduleCandidate
+          .unavailable();
+    }
+
+    LocalTime startTime =
+        schedule.getStartTime();
+
+    /*
+     * 공공데이터에 시작 시간이 없는 경우에도
+     * 배출 요일 자체는 제공할 수 있습니다.
+     */
+    if (startTime == null) {
+      return DayScheduleCandidate
+          .available(
+              null
+          );
+    }
+
+    LocalDateTime candidateDateTime =
+        candidateDate.atTime(
+            startTime
+        );
+
+    if (
+        candidateDate.equals(
+            referenceDateTime.toLocalDate()
+        )
+            && candidateDateTime.isBefore(
+            referenceDateTime
+        )
+    ) {
+      /*
+       * 현재 배출 가능 상태였다면
+       * calculateNextSchedule() 시작 부분에서
+       * 이미 현재 시각을 반환했으므로,
+       *
+       * 여기까지 왔다는 것은 오늘 시작 시각을
+       * 다시 다음 일정으로 잡으면 안 된다는 뜻입니다.
+       */
+      return DayScheduleCandidate
+          .unavailable();
+    }
+
+    return DayScheduleCandidate
+        .available(
+            candidateDateTime
+        );
+  }
+
+  /*
+   * =========================================================
+   * 정기 일정이 없는 경우의 예외 계산
+   * =========================================================
+   */
+
+  private ExceptionOnlyResult
+  calculateExceptionOnlyResult(
+      List<ScheduleException> exceptions,
+      LocalDateTime referenceDateTime
+  ) {
+    if (exceptions.isEmpty()) {
+      return ExceptionOnlyResult.empty();
+    }
+
+    LocalDate today =
+        referenceDateTime
+            .toLocalDate();
+
+    LocalTime currentTime =
+        referenceDateTime
+            .toLocalTime();
+
+    ScheduleException todayException =
+        findException(
+            exceptions,
+            today
+        );
+
+    ScheduleException yesterdayException =
+        findException(
+            exceptions,
+            today.minusDays(1)
+        );
+
+    boolean availableToday =
+        todayException != null
+            && isExceptionAvailableOnDate(
+            todayException
+        );
+
+    boolean availableNow;
+
+    if (todayException != null) {
+      availableNow =
+          isExceptionAvailableNowOnEffectiveDate(
+              todayException,
+              currentTime
+          );
+    } else {
+      availableNow =
+          yesterdayException != null
+              && isExceptionOvernightContinuationAvailable(
+              yesterdayException,
+              currentTime
+          );
+    }
+
+    if (availableNow) {
+      return new ExceptionOnlyResult(
+          availableToday,
+          true,
+          today,
+          referenceDateTime
+      );
+    }
+
+    ScheduleException nextException =
+        exceptions.stream()
+            .filter(
+                exception ->
+                    !exception
+                        .getEffectiveDate()
+                        .isBefore(
+                            today
+                        )
+            )
+            .filter(
+                exception ->
+                    !exception.isUnavailable()
+            )
+            .filter(
+                ScheduleException::hasTimeWindow
+            )
+            .filter(
+                exception -> {
+                  LocalDateTime start =
+                      exception
+                          .getEffectiveDate()
+                          .atTime(
+                              exception
+                                  .getStartTime()
+                          );
+
+                  return !start.isBefore(
+                      referenceDateTime
+                  );
+                }
+            )
+            .min(
+                Comparator.comparing(
+                    exception ->
+                        exception
+                            .getEffectiveDate()
+                            .atTime(
+                                exception
+                                    .getStartTime()
+                            )
+                )
+            )
+            .orElse(
+                null
+            );
+
+    if (nextException == null) {
+      return new ExceptionOnlyResult(
+          availableToday,
+          false,
+          null,
+          null
+      );
+    }
+
+    return new ExceptionOnlyResult(
+        availableToday,
+        false,
+        nextException.getEffectiveDate(),
+        nextException
+            .getEffectiveDate()
+            .atTime(
+                nextException
+                    .getStartTime()
+            )
+    );
+  }
+
+  /*
+   * =========================================================
+   * 공통
+   * =========================================================
+   */
+
+  private ScheduleException findException(
+      List<ScheduleException> exceptions,
+      LocalDate date
+  ) {
+    return exceptions.stream()
+        .filter(
+            exception ->
+                Objects.equals(
+                    exception
+                        .getEffectiveDate(),
+                    date
+                )
+        )
+        .findFirst()
+        .orElse(
+            null
+        );
+  }
+
   private User getUser(
       Long userId
   ) {
@@ -855,9 +1371,6 @@ public class CollectionAreaScheduleQueryService {
         );
   }
 
-  /**
-   * 일반주택 사용자의 Residence를 확인합니다.
-   */
   private Residence getGeneralHousingResidence(
       User user
   ) {
@@ -874,10 +1387,6 @@ public class CollectionAreaScheduleQueryService {
     return user.getResidence();
   }
 
-  /**
-   * CollectionArea + wasteType을
-   * 일정 Map의 Key로 사용합니다.
-   */
   private record ScheduleKey(
 
       Long collectionAreaId,
@@ -887,9 +1396,6 @@ public class CollectionAreaScheduleQueryService {
   ) {
   }
 
-  /**
-   * 요일 문자열 파싱 결과입니다.
-   */
   private record DayParseResult(
 
       Set<DayOfWeek> days,
@@ -907,9 +1413,31 @@ public class CollectionAreaScheduleQueryService {
     }
   }
 
-  /**
-   * 다음 배출 가능 날짜/시간 계산 결과입니다.
-   */
+  private record DayScheduleCandidate(
+
+      boolean available,
+
+      LocalDateTime availableAt
+
+  ) {
+
+    private static DayScheduleCandidate available(
+        LocalDateTime availableAt
+    ) {
+      return new DayScheduleCandidate(
+          true,
+          availableAt
+      );
+    }
+
+    private static DayScheduleCandidate unavailable() {
+      return new DayScheduleCandidate(
+          false,
+          null
+      );
+    }
+  }
+
   private record NextScheduleResult(
 
       LocalDate nextAvailableDate,
@@ -920,6 +1448,28 @@ public class CollectionAreaScheduleQueryService {
 
     private static NextScheduleResult empty() {
       return new NextScheduleResult(
+          null,
+          null
+      );
+    }
+  }
+
+  private record ExceptionOnlyResult(
+
+      boolean availableToday,
+
+      boolean availableNow,
+
+      LocalDate nextAvailableDate,
+
+      LocalDateTime nextAvailableAt
+
+  ) {
+
+    private static ExceptionOnlyResult empty() {
+      return new ExceptionOnlyResult(
+          false,
+          false,
           null,
           null
       );

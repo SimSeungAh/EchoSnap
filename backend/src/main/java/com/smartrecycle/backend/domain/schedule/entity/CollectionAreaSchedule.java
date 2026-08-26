@@ -24,14 +24,21 @@ import java.time.LocalTime;
 
 /**
  * 일반주택 사용자에게 적용되는
- * CollectionArea 기반 생활폐기물 배출 일정입니다.
+ * CollectionArea 기반 생활폐기물 공식 배출 일정입니다.
  *
- * 기존 RecycleSchedule은 Apartment + WasteItem 단위의
- * 공동주택 공식 일정 전용으로 유지합니다.
+ * 기존 RecycleSchedule은
+ * Apartment + WasteItem 기반의 공동주택 공식 일정입니다.
  *
- * CollectionAreaSchedule은 행정안전부
- * 생활쓰레기배출정보 공공데이터의
- * 생활쓰레기 / 음식물쓰레기 / 재활용품 단위 일정을 저장합니다.
+ * CollectionAreaSchedule은
+ * 일반주택의 CollectionArea +
+ * CollectionWasteType 기준 공식 일정을 저장합니다.
+ *
+ * 일정 규칙의 출처는
+ *
+ * PUBLIC_DATA
+ * ADMIN_APPROVED_REPORT
+ *
+ * 두 가지로 구분합니다.
  */
 @Getter
 @Entity
@@ -54,18 +61,23 @@ import java.time.LocalTime;
         @Index(
             name = "idx_collection_area_schedules_waste_type",
             columnList = "waste_type"
+        ),
+        @Index(
+            name = "idx_collection_area_schedules_source_type",
+            columnList = "source_type"
         )
     }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class CollectionAreaSchedule extends BaseEntity {
+public class CollectionAreaSchedule
+    extends BaseEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   /**
-   * 이 일정이 적용되는 지자체 수거구역입니다.
+   * 일정이 적용되는 일반주택 수거구역입니다.
    */
   @ManyToOne(
       fetch = FetchType.LAZY,
@@ -78,7 +90,7 @@ public class CollectionAreaSchedule extends BaseEntity {
   private CollectionArea collectionArea;
 
   /**
-   * 공공데이터 기준 폐기물 종류입니다.
+   * 폐기물 종류입니다.
    *
    * LIFE_WASTE
    * FOOD_WASTE
@@ -93,15 +105,31 @@ public class CollectionAreaSchedule extends BaseEntity {
   private CollectionWasteType wasteType;
 
   /**
-   * 공공데이터에서 제공하는 원본 배출요일 문자열입니다.
+   * 현재 공식 일정 규칙의 출처입니다.
+   *
+   * PUBLIC_DATA:
+   * 공공데이터 일정
+   *
+   * ADMIN_APPROVED_REPORT:
+   * 주민 제보를 관리자가 승인하여
+   * 공식 일정으로 반영한 값
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(
+      name = "source_type",
+      nullable = false,
+      length = 30
+  )
+  private CollectionAreaScheduleSourceType
+      sourceType;
+
+  /**
+   * 배출 요일 표현입니다.
    *
    * 예:
-   * 일+월+화+수+목+금
    * 일+화+목
+   * 월~금
    * 매일
-   *
-   * 지자체마다 표현 형식이 다를 수 있으므로
-   * 원본 문자열을 보존합니다.
    */
   @Column(
       name = "emission_days",
@@ -110,10 +138,7 @@ public class CollectionAreaSchedule extends BaseEntity {
   private String emissionDays;
 
   /**
-   * 배출 시작 시간입니다.
-   *
-   * 공공데이터에 시간이 없거나
-   * 해석할 수 없는 경우 null일 수 있습니다.
+   * 배출 시작 시간
    */
   @Column(
       name = "start_time"
@@ -121,10 +146,11 @@ public class CollectionAreaSchedule extends BaseEntity {
   private LocalTime startTime;
 
   /**
-   * 배출 종료 시간입니다.
+   * 배출 종료 시간
    *
+   * 일반주택은
    * 20:00 ~ 02:00처럼
-   * 다음 날로 넘어가는 일정도 허용합니다.
+   * 자정을 넘기는 일정도 허용합니다.
    */
   @Column(
       name = "end_time"
@@ -132,7 +158,9 @@ public class CollectionAreaSchedule extends BaseEntity {
   private LocalTime endTime;
 
   /**
-   * 지자체가 안내하는 실제 배출 방법입니다.
+   * 지자체가 안내하는 배출 방법입니다.
+   *
+   * 주민 제보에서는 현재 이 값을 수정하지 않습니다.
    */
   @Column(
       name = "emission_method",
@@ -141,7 +169,7 @@ public class CollectionAreaSchedule extends BaseEntity {
   private String emissionMethod;
 
   /**
-   * 배출장소입니다.
+   * 배출 장소
    */
   @Column(
       name = "emission_place",
@@ -150,7 +178,7 @@ public class CollectionAreaSchedule extends BaseEntity {
   private String emissionPlace;
 
   /**
-   * 배출장소 유형입니다.
+   * 배출 장소 유형
    */
   @Column(
       name = "emission_place_type",
@@ -159,15 +187,7 @@ public class CollectionAreaSchedule extends BaseEntity {
   private String emissionPlaceType;
 
   /**
-   * 공공데이터의 미수거일 안내입니다.
-   *
-   * 예:
-   * 공휴일
-   * 명절 연휴
-   * 토요일
-   *
-   * 자유 텍스트일 수 있기 때문에
-   * 우선 원문 그대로 보관합니다.
+   * 공공데이터의 미수거일 안내 원문입니다.
    */
   @Column(
       name = "uncollected_day",
@@ -178,6 +198,7 @@ public class CollectionAreaSchedule extends BaseEntity {
   private CollectionAreaSchedule(
       CollectionArea collectionArea,
       CollectionWasteType wasteType,
+      CollectionAreaScheduleSourceType sourceType,
       String emissionDays,
       LocalTime startTime,
       LocalTime endTime,
@@ -186,22 +207,43 @@ public class CollectionAreaSchedule extends BaseEntity {
       String emissionPlaceType,
       String uncollectedDay
   ) {
-    this.collectionArea = collectionArea;
-    this.wasteType = wasteType;
-    this.emissionDays = emissionDays;
-    this.startTime = startTime;
-    this.endTime = endTime;
-    this.emissionMethod = emissionMethod;
-    this.emissionPlace = emissionPlace;
-    this.emissionPlaceType = emissionPlaceType;
-    this.uncollectedDay = uncollectedDay;
+    this.collectionArea =
+        collectionArea;
+
+    this.wasteType =
+        wasteType;
+
+    this.sourceType =
+        sourceType;
+
+    this.emissionDays =
+        emissionDays;
+
+    this.startTime =
+        startTime;
+
+    this.endTime =
+        endTime;
+
+    this.emissionMethod =
+        emissionMethod;
+
+    this.emissionPlace =
+        emissionPlace;
+
+    this.emissionPlaceType =
+        emissionPlaceType;
+
+    this.uncollectedDay =
+        uncollectedDay;
   }
 
   /**
    * 공공데이터를 기준으로
-   * CollectionArea 일정을 새로 생성합니다.
+   * 공식 일정을 최초 생성합니다.
    */
-  public static CollectionAreaSchedule createFromPublicData(
+  public static CollectionAreaSchedule
+  createFromPublicData(
       CollectionArea collectionArea,
       CollectionWasteType wasteType,
       String emissionDays,
@@ -215,6 +257,7 @@ public class CollectionAreaSchedule extends BaseEntity {
     return new CollectionAreaSchedule(
         collectionArea,
         wasteType,
+        CollectionAreaScheduleSourceType.PUBLIC_DATA,
         emissionDays,
         startTime,
         endTime,
@@ -226,9 +269,48 @@ public class CollectionAreaSchedule extends BaseEntity {
   }
 
   /**
-   * 같은 CollectionArea + 폐기물 종류의
-   * 공공데이터가 다시 들어오면
-   * 기존 일정을 최신 값으로 갱신합니다.
+   * 주민 INITIAL_SCHEDULE 제보가
+   * 관리자 승인된 경우
+   * 새로운 공식 일정을 생성합니다.
+   *
+   * 주민 제보에는 현재
+   * 배출 방법/장소 데이터가 없으므로
+   * 해당 필드는 null로 시작합니다.
+   */
+  public static CollectionAreaSchedule
+  createFromApprovedReport(
+      CollectionArea collectionArea,
+      CollectionWasteType wasteType,
+      String emissionDays,
+      LocalTime startTime,
+      LocalTime endTime
+  ) {
+    return new CollectionAreaSchedule(
+        collectionArea,
+        wasteType,
+        CollectionAreaScheduleSourceType
+            .ADMIN_APPROVED_REPORT,
+        emissionDays,
+        startTime,
+        endTime,
+        null,
+        null,
+        null,
+        null
+    );
+  }
+
+  /**
+   * 공공데이터가 다시 동기화됐을 때
+   * 일정을 최신 데이터로 갱신합니다.
+   *
+   * 단, 주민 제보를 관리자가 승인하여
+   * 공식 일정 규칙을 직접 보정한 상태라면
+   * emissionDays / startTime / endTime은
+   * 공공데이터가 덮어쓰지 않습니다.
+   *
+   * 배출 방법, 장소, 미수거일 같은
+   * 부가 정보는 계속 최신 공공데이터로 갱신합니다.
    */
   public void updateFromPublicData(
       String emissionDays,
@@ -239,17 +321,81 @@ public class CollectionAreaSchedule extends BaseEntity {
       String emissionPlaceType,
       String uncollectedDay
   ) {
-    this.emissionDays = emissionDays;
-    this.startTime = startTime;
-    this.endTime = endTime;
-    this.emissionMethod = emissionMethod;
-    this.emissionPlace = emissionPlace;
-    this.emissionPlaceType = emissionPlaceType;
-    this.uncollectedDay = uncollectedDay;
+    if (
+        sourceType
+            != CollectionAreaScheduleSourceType
+            .ADMIN_APPROVED_REPORT
+    ) {
+      this.emissionDays =
+          emissionDays;
+
+      this.startTime =
+          startTime;
+
+      this.endTime =
+          endTime;
+
+      this.sourceType =
+          CollectionAreaScheduleSourceType
+              .PUBLIC_DATA;
+    }
+
+    /*
+     * 일정 규칙을 주민 승인 값으로 보호하더라도
+     * 공공데이터의 부가 정보는 계속 최신화합니다.
+     */
+    this.emissionMethod =
+        emissionMethod;
+
+    this.emissionPlace =
+        emissionPlace;
+
+    this.emissionPlaceType =
+        emissionPlaceType;
+
+    this.uncollectedDay =
+        uncollectedDay;
   }
 
   /**
-   * 시작 시간과 종료 시간이 모두 존재하는지 확인합니다.
+   * 주민 SCHEDULE_CORRECTION 제보가
+   * 관리자 승인된 경우
+   * 공식 일정 규칙을 수정합니다.
+   *
+   * 기존 공공데이터의 배출 방법/장소 등은
+   * 그대로 보존합니다.
+   */
+  public void updateFromApprovedReport(
+      String emissionDays,
+      LocalTime startTime,
+      LocalTime endTime
+  ) {
+    this.emissionDays =
+        emissionDays;
+
+    this.startTime =
+        startTime;
+
+    this.endTime =
+        endTime;
+
+    this.sourceType =
+        CollectionAreaScheduleSourceType
+            .ADMIN_APPROVED_REPORT;
+  }
+
+  /**
+   * 현재 공식 일정이
+   * 관리자 승인 주민 제보로 보정된 상태인지 확인합니다.
+   */
+  public boolean isAdminApprovedOverride() {
+    return sourceType
+        == CollectionAreaScheduleSourceType
+        .ADMIN_APPROVED_REPORT;
+  }
+
+  /**
+   * 시작/종료 시간이 모두 존재하는지 확인합니다.
    */
   public boolean hasTimeWindow() {
     return startTime != null
@@ -257,13 +403,10 @@ public class CollectionAreaSchedule extends BaseEntity {
   }
 
   /**
-   * 자정을 넘어가는 일정인지 확인합니다.
+   * 자정을 넘기는 일정인지 확인합니다.
    *
    * 예:
    * 20:00 ~ 02:00
-   *
-   * 종료 시간이 시작 시간보다 이르면
-   * 다음 날 종료되는 일정으로 판단합니다.
    */
   public boolean isOvernight() {
     if (!hasTimeWindow()) {
