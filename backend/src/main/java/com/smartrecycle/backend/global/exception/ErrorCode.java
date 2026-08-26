@@ -259,6 +259,39 @@ public enum ErrorCode {
   ),
 
   /*
+   * 이미지 / AI
+   */
+  IMAGE_FILE_EMPTY(
+      HttpStatus.BAD_REQUEST,
+      "IMAGE_001",
+      "업로드할 이미지 파일이 비어 있습니다."
+  ),
+
+  IMAGE_FILE_TOO_LARGE(
+      HttpStatus.PAYLOAD_TOO_LARGE,
+      "IMAGE_002",
+      "이미지 파일의 최대 크기는 10MB입니다."
+  ),
+
+  UNSUPPORTED_IMAGE_TYPE(
+      HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+      "IMAGE_003",
+      "JPG, JPEG, PNG 이미지 파일만 업로드할 수 있습니다."
+  ),
+
+  IMAGE_STORAGE_FAILED(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      "IMAGE_004",
+      "이미지 파일 저장에 실패했습니다."
+  ),
+
+  IMAGE_LOG_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "IMAGE_005",
+      "이미지 분석 이력을 찾을 수 없습니다."
+  ),
+
+  /*
    * 주소 검색
    */
   INVALID_ADDRESS_SEARCH_CONDITION(

@@ -5,6 +5,12 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+### SmartRecycle local storage ###
+uploads/
+
+### Secret configuration ###
+src/main/resources/application-secret.yml
+
 ### STS ###
 .apt_generated
 .classpath
@@ -35,5 +41,3 @@ out/
 
 ### VS Code ###
 .vscode/
-
-src/main/resources/application-secret.yml
