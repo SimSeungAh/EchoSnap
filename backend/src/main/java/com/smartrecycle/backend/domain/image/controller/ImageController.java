@@ -6,10 +6,12 @@ import com.smartrecycle.backend.domain.image.dto.response.ImageCorrectionRespons
 import com.smartrecycle.backend.domain.image.dto.response.ImageFileResponse;
 import com.smartrecycle.backend.domain.image.dto.response.ImageUploadResponse;
 import com.smartrecycle.backend.domain.image.dto.response.MobileAnalysisResponse;
+import com.smartrecycle.backend.domain.image.dto.response.ServerReanalysisResponse;
 import com.smartrecycle.backend.domain.image.service.ImageCorrectionService;
 import com.smartrecycle.backend.domain.image.service.ImageFileService;
 import com.smartrecycle.backend.domain.image.service.ImageUploadService;
 import com.smartrecycle.backend.domain.image.service.MobileImageAnalysisService;
+import com.smartrecycle.backend.domain.image.service.ServerImageAnalysisService;
 import com.smartrecycle.backend.global.response.ApiResponse;
 import com.smartrecycle.backend.global.security.service.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,8 +54,11 @@ public class ImageController {
   private final ImageCorrectionService
       imageCorrectionService;
 
+  private final ServerImageAnalysisService
+      serverImageAnalysisService;
+
   /**
-   * AI 분석에 사용할 이미지를 업로드합니다.
+   * AI 분석에 사용할 이미지 업로드
    */
   @PostMapping(
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -72,8 +77,8 @@ public class ImageController {
                     최대 파일 크기:
                     - 10MB
 
-                    업로드가 완료되면
-                    ImageLog가 UPLOADED 상태로 생성됩니다.
+                    업로드 완료 시
+                    ImageLog는 UPLOADED 상태가 됩니다.
                     """
   )
   public ApiResponse<ImageUploadResponse>
@@ -99,8 +104,7 @@ public class ImageController {
   }
 
   /**
-   * Flutter TensorFlow Lite의
-   * 1차 AI 분석 결과를 기록합니다.
+   * Flutter TensorFlow Lite 분석 결과 저장
    */
   @PostMapping(
       "/{imageLogId}/mobile-analysis"
@@ -108,15 +112,14 @@ public class ImageController {
   @Operation(
       summary = "모바일 AI 분석 결과 저장",
       description = """
-                    Flutter TensorFlow Lite가 수행한
-                    1차 폐기물 분류 결과를 저장합니다.
+                    Flutter TensorFlow Lite의
+                    1차 분석 결과를 저장합니다.
 
-                    신뢰도가 0.70 이상이면
+                    신뢰도가 기준 이상이면
                     MOBILE_ANALYZED 상태가 됩니다.
 
-                    신뢰도가 0.70 미만이면
-                    SERVER_REANALYSIS_PENDING 상태가 되어
-                    이후 Python YOLO 재분석 대상으로 처리됩니다.
+                    신뢰도가 기준보다 낮으면
+                    SERVER_REANALYSIS_PENDING으로 변경됩니다.
                     """
   )
   public ApiResponse<MobileAnalysisResponse>
@@ -147,8 +150,56 @@ public class ImageController {
   }
 
   /**
-   * AI 분석 결과가 틀린 경우
-   * 사용자가 올바른 품목으로 수정합니다.
+   * 낮은 신뢰도의 이미지를
+   * Python YOLO 서버로 재분석합니다.
+   */
+  @PostMapping(
+      "/{imageLogId}/server-reanalysis"
+  )
+  @Operation(
+      summary = "Python YOLO 서버 재분석",
+      description = """
+                    모바일 TensorFlow Lite 분석 신뢰도가 낮아
+                    SERVER_REANALYSIS_PENDING 상태가 된 이미지를
+                    Python FastAPI YOLO 서버로 전송합니다.
+
+                    흐름:
+
+                    1. 로그인 사용자와 ImageLog 소유권 확인
+                    2. SERVER_REANALYSIS_PENDING 상태 확인
+                    3. 저장된 실제 이미지 로드
+                    4. FastAPI /analyze multipart 호출
+                    5. YOLO label을 WasteItem으로 매핑
+                    6. 서버 AI 결과와 신뢰도, 모델 버전 저장
+
+                    YOLO의 classId는
+                    WasteItem DB ID로 직접 사용하지 않습니다.
+                    """
+  )
+  public ApiResponse<ServerReanalysisResponse>
+  reanalyzeWithServerAi(
+
+      @AuthenticationPrincipal
+      CustomUserDetails userDetails,
+
+      @PathVariable
+      Long imageLogId
+  ) {
+    ServerReanalysisResponse response =
+        serverImageAnalysisService
+            .reanalyze(
+                userDetails.getUserId(),
+                imageLogId
+            );
+
+    return ApiResponse.success(
+        "서버 AI 재분석을 완료했습니다.",
+        response
+    );
+  }
+
+  /**
+   * AI 분석 결과 사용자 수정
    */
   @PutMapping(
       "/{imageLogId}/correction"
@@ -156,18 +207,14 @@ public class ImageController {
   @Operation(
       summary = "AI 분석 결과 사용자 수정",
       description = """
-                    로그인한 사용자가
-                    자신의 AI 분석 결과가 잘못되었다고 판단한 경우
-                    올바른 폐기물 품목을 선택합니다.
+                    사용자가 AI 분석 결과가 잘못되었다고 판단한 경우
+                    올바른 폐기물 품목으로 수정합니다.
 
-                    기존 모바일 TensorFlow Lite 결과와
-                    서버 YOLO 결과는 삭제하지 않습니다.
+                    기존 AI 분석 결과는 삭제하지 않고
+                    사용자 수정값을 별도로 저장합니다.
 
-                    사용자 수정 결과는 별도로 저장되며
-                    관리자 검수 상태가 PENDING으로 변경됩니다.
-
-                    동일한 ImageLog의 수정 결과를 다시 변경하는 것도
-                    같은 API를 통해 처리할 수 있습니다.
+                    수정된 데이터는
+                    관리자 검수 PENDING 상태가 됩니다.
                     """
   )
   public ApiResponse<ImageCorrectionResponse>
@@ -198,8 +245,7 @@ public class ImageController {
   }
 
   /**
-   * 로그인 사용자가
-   * 자신의 업로드 이미지를 조회합니다.
+   * 로그인 사용자의 이미지 파일 조회
    */
   @GetMapping(
       "/files/{storedFileName}"
@@ -210,9 +256,7 @@ public class ImageController {
                     로그인한 사용자가
                     자신이 업로드한 이미지 파일을 조회합니다.
 
-                    UUID 파일명을 알고 있더라도
-                    해당 ImageLog의 소유자가 아니면
-                    파일을 반환하지 않습니다.
+                    다른 사용자의 이미지에는 접근할 수 없습니다.
                     """
   )
   public ResponseEntity<Resource>

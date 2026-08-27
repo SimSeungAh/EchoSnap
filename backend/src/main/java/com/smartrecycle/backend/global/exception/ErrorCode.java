@@ -291,6 +291,54 @@ public enum ErrorCode {
       "이미지 분석 이력을 찾을 수 없습니다."
   ),
 
+  AI_SERVER_CONNECTION_FAILED(
+      HttpStatus.BAD_GATEWAY,
+      "AI_001",
+      "AI 분석 서버에 연결할 수 없습니다."
+  ),
+
+  AI_SERVER_TIMEOUT(
+      HttpStatus.GATEWAY_TIMEOUT,
+      "AI_002",
+      "AI 분석 서버의 응답 시간이 초과되었습니다."
+  ),
+
+  AI_SERVER_UNAVAILABLE(
+      HttpStatus.SERVICE_UNAVAILABLE,
+      "AI_003",
+      "AI 분석 서비스를 현재 사용할 수 없습니다."
+  ),
+
+  AI_SERVER_ERROR(
+      HttpStatus.BAD_GATEWAY,
+      "AI_004",
+      "AI 분석 서버에서 오류가 발생했습니다."
+  ),
+
+  AI_SERVER_INVALID_RESPONSE(
+      HttpStatus.BAD_GATEWAY,
+      "AI_005",
+      "AI 분석 서버의 응답 형식이 올바르지 않습니다."
+  ),
+
+  AI_MAPPING_NOT_FOUND(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      "AI_006",
+      "AI 분석 결과에 연결된 폐기물 품목을 찾을 수 없습니다."
+  ),
+
+  AI_REANALYSIS_INVALID_STATE(
+      HttpStatus.CONFLICT,
+      "AI_007",
+      "현재 이미지 분석 상태에서는 서버 재분석을 실행할 수 없습니다."
+  ),
+
+  AI_SERVER_REQUEST_REJECTED(
+      HttpStatus.BAD_GATEWAY,
+      "AI_008",
+      "AI 분석 서버가 분석 요청을 처리하지 못했습니다."
+  ),
+
   /*
    * 주소 검색
    */
