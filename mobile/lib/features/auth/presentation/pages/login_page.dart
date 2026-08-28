@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:smart_recycle/app/app_routes.dart';
 import 'package:smart_recycle/core/storage/token_storage.dart';
 import 'package:smart_recycle/features/auth/data/auth_api.dart';
+import 'package:smart_recycle/features/user/data/current_user_api.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -15,17 +16,16 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _formKey =
+  final GlobalKey<FormState> _formKey =
   GlobalKey<FormState>();
 
-  final _emailController =
+  final TextEditingController _emailController =
   TextEditingController();
 
-  final _passwordController =
+  final TextEditingController _passwordController =
   TextEditingController();
 
   bool _isLoading = false;
-
   bool _obscurePassword = true;
 
   @override
@@ -41,7 +41,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    final isValid =
+    final bool isValid =
         _formKey.currentState?.validate() ??
             false;
 
@@ -56,7 +56,8 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final token = await AuthApi.login(
+      final AuthToken token =
+      await AuthApi.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
@@ -66,15 +67,40 @@ class _LoginPageState extends State<LoginPage> {
         refreshToken: token.refreshToken,
       );
 
+      /*
+       * AuthenticatedApiClient가 저장된 Access Token을
+       * 자동으로 사용하므로 토큰을 직접 전달하지 않습니다.
+       */
+      final CurrentUser user =
+      await CurrentUserApi.getMe();
+
       if (!mounted) {
         return;
       }
 
-      Navigator.pushReplacementNamed(
-        context,
-        AppRoutes.residenceSetup,
-      );
+      if (user.onboardingCompleted) {
+        _moveToHome();
+      } else {
+        _moveToResidenceSetup();
+      }
     } on AuthApiException catch (exception) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(
+        exception.message,
+      );
+    } on CurrentUserApiException catch (exception) {
+      /*
+       * 실제 인증 거부일 때만 토큰을 삭제합니다.
+       * 단순 네트워크 장애라면 방금 발급된 토큰을
+       * 임의로 없애지 않습니다.
+       */
+      if (exception.unauthorized) {
+        await TokenStorage.clearTokens();
+      }
+
       if (!mounted) {
         return;
       }
@@ -99,6 +125,22 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _moveToResidenceSetup() {
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.residenceSetup,
+          (route) => false,
+    );
+  }
+
+  void _moveToHome() {
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.home,
+          (route) => false,
+    );
+  }
+
   void _showMessage(
       String message,
       ) {
@@ -116,15 +158,14 @@ class _LoginPageState extends State<LoginPage> {
   String? _validateEmail(
       String? value,
       ) {
-    final email =
+    final String email =
         value?.trim() ?? '';
 
     if (email.isEmpty) {
       return '이메일을 입력해주세요.';
     }
 
-    final emailPattern =
-    RegExp(
+    final RegExp emailPattern = RegExp(
       r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
     );
 
@@ -155,11 +196,13 @@ class _LoginPageState extends State<LoginPage> {
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding:
+            const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight:
-                MediaQuery.sizeOf(context).height -
+                MediaQuery.sizeOf(context)
+                    .height -
                     48,
               ),
               child: IntrinsicHeight(
@@ -214,10 +257,12 @@ class _LoginPageState extends State<LoginPage> {
                       enabled:
                       !_isLoading,
                       keyboardType:
-                      TextInputType.emailAddress,
+                      TextInputType
+                          .emailAddress,
                       textInputAction:
                       TextInputAction.next,
-                      autofillHints: const [
+                      autofillHints:
+                      const [
                         AutofillHints.email,
                       ],
                       validator:
@@ -246,7 +291,8 @@ class _LoginPageState extends State<LoginPage> {
                       _obscurePassword,
                       textInputAction:
                       TextInputAction.done,
-                      autofillHints: const [
+                      autofillHints:
+                      const [
                         AutofillHints.password,
                       ],
                       validator:
@@ -259,7 +305,8 @@ class _LoginPageState extends State<LoginPage> {
                         labelText: '비밀번호',
                         prefixIcon:
                         const Icon(
-                          Icons.lock_outline_rounded,
+                          Icons
+                              .lock_outline_rounded,
                         ),
                         suffixIcon:
                         IconButton(
@@ -320,8 +367,7 @@ class _LoginPageState extends State<LoginPage> {
                       _isLoading
                           ? null
                           : () {
-                        // 다음 단계에서
-                        // 회원가입 화면을 연결합니다.
+                        // 회원가입은 후속 단계에서 연결합니다.
                       },
                       child:
                       const Text(

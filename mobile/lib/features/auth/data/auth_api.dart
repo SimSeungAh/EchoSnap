@@ -16,18 +16,26 @@ class AuthToken {
       Map<String, dynamic> json,
       ) {
     return AuthToken(
-      accessToken: json['accessToken'] as String? ?? '',
-      refreshToken: json['refreshToken'] as String? ?? '',
+      accessToken:
+      json['accessToken'] as String? ?? '',
+      refreshToken:
+      json['refreshToken'] as String? ?? '',
     );
   }
 }
 
 class AuthApiException implements Exception {
   const AuthApiException(
-      this.message,
-      );
+      this.message, {
+        this.statusCode,
+      });
 
   final String message;
+  final int? statusCode;
+
+  bool get unauthorized =>
+      statusCode == 401 ||
+          statusCode == 403;
 
   @override
   String toString() {
@@ -42,10 +50,43 @@ class AuthApi {
     required String email,
     required String password,
   }) async {
-    final uri = Uri.parse(
+    final Uri uri = Uri.parse(
       '${AppConfig.apiBaseUrl}/api/auth/login',
     );
 
+    return _requestToken(
+      uri: uri,
+      body: {
+        'email': email,
+        'password': password,
+      },
+      defaultErrorMessage:
+      '로그인 처리 중 오류가 발생했습니다.',
+    );
+  }
+
+  static Future<AuthToken> reissue({
+    required String refreshToken,
+  }) async {
+    final Uri uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/api/auth/reissue',
+    );
+
+    return _requestToken(
+      uri: uri,
+      body: {
+        'refreshToken': refreshToken,
+      },
+      defaultErrorMessage:
+      '로그인 정보를 갱신하지 못했습니다.',
+    );
+  }
+
+  static Future<AuthToken> _requestToken({
+    required Uri uri,
+    required Map<String, dynamic> body,
+    required String defaultErrorMessage,
+  }) async {
     late http.Response response;
 
     try {
@@ -55,11 +96,9 @@ class AuthApi {
         headers: const {
           'Content-Type':
           'application/json; charset=UTF-8',
+          'Accept': 'application/json',
         },
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
+        body: jsonEncode(body),
       )
           .timeout(
         const Duration(seconds: 10),
@@ -71,47 +110,50 @@ class AuthApi {
       );
     }
 
-    Map<String, dynamic> body;
+    Map<String, dynamic> responseBody;
 
     try {
-      body = jsonDecode(
+      responseBody = jsonDecode(
         utf8.decode(response.bodyBytes),
       ) as Map<String, dynamic>;
     } catch (_) {
       throw AuthApiException(
         '서버 응답을 처리할 수 없습니다. '
             '(HTTP ${response.statusCode})',
+        statusCode: response.statusCode,
       );
     }
 
-    final message =
-        body['message'] as String? ??
-            '로그인 처리 중 오류가 발생했습니다.';
+    final String message =
+        responseBody['message'] as String? ??
+            defaultErrorMessage;
 
     if (response.statusCode < 200 ||
         response.statusCode >= 300) {
       throw AuthApiException(
         message,
+        statusCode: response.statusCode,
       );
     }
 
-    if (body['success'] != true) {
+    if (responseBody['success'] != true) {
       throw AuthApiException(
         message,
+        statusCode: response.statusCode,
       );
     }
 
-    final data = body['data'];
+    final dynamic data =
+    responseBody['data'];
 
     if (data is! Map<String, dynamic>) {
       throw const AuthApiException(
-        '로그인 응답에 토큰 정보가 없습니다.',
+        '서버 응답에 토큰 정보가 없습니다.',
       );
     }
 
-    final token = AuthToken.fromJson(
-      data,
-    );
+    final AuthToken token =
+    AuthToken.fromJson(data);
 
     if (token.accessToken.isEmpty ||
         token.refreshToken.isEmpty) {
