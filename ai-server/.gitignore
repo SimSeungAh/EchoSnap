@@ -10,3 +10,10 @@ models/*.engine
 runs/
 .idea/
 .vscode/
+raw-datasets/
+dataset/
+raw-datasets/
+models/
+runs/
+*.pt
+training/smartrecycle-data.generated.yaml

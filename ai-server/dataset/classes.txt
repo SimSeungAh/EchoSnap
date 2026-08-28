@@ -1,0 +1,6 @@
+cardboard_box
+pet_bottle
+plastic_container
+can
+glass_bottle
+styrofoam
