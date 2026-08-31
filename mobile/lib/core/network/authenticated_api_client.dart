@@ -15,6 +15,7 @@ class AuthenticatedApiException
       });
 
   final String message;
+
   final bool unauthorized;
 
   @override
@@ -42,7 +43,8 @@ class AuthenticatedApiClient {
             .get(
           uri,
           headers: {
-            'Accept': 'application/json',
+            'Accept':
+            'application/json',
             'Authorization':
             'Bearer $accessToken',
           },
@@ -72,7 +74,8 @@ class AuthenticatedApiClient {
       request: (accessToken) {
         final Map<String, String> headers =
         {
-          'Accept': 'application/json',
+          'Accept':
+          'application/json',
           'Authorization':
           'Bearer $accessToken',
         };
@@ -99,6 +102,45 @@ class AuthenticatedApiClient {
     );
   }
 
+  /// 기존 리소스 전체 또는 명시적인 값을
+  /// 변경하는 PUT 요청입니다.
+  ///
+  /// SmartRecycle에서는 현재
+  /// AI 사용자 정정 API에서 사용합니다.
+  static Future<http.Response> put(
+      String path, {
+        required Map<String, dynamic> body,
+      }) async {
+    final Uri uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}$path',
+    );
+
+    return _sendWithAuthentication(
+      request: (accessToken) {
+        return http
+            .put(
+          uri,
+          headers: {
+            'Accept':
+            'application/json',
+            'Content-Type':
+            'application/json; charset=UTF-8',
+            'Authorization':
+            'Bearer $accessToken',
+          },
+          body: jsonEncode(
+            body,
+          ),
+        )
+            .timeout(
+          const Duration(
+            seconds: 10,
+          ),
+        );
+      },
+    );
+  }
+
   static Future<http.Response> patch(
       String path, {
         required Map<String, dynamic> body,
@@ -113,7 +155,8 @@ class AuthenticatedApiClient {
             .patch(
           uri,
           headers: {
-            'Accept': 'application/json',
+            'Accept':
+            'application/json',
             'Content-Type':
             'application/json; charset=UTF-8',
             'Authorization':
@@ -148,11 +191,16 @@ class AuthenticatedApiClient {
       request: (accessToken) {
         return _sendMultipart(
           uri: uri,
-          accessToken: accessToken,
-          fieldName: fieldName,
-          bytes: bytes,
-          fileName: fileName,
-          contentType: contentType,
+          accessToken:
+          accessToken,
+          fieldName:
+          fieldName,
+          bytes:
+          bytes,
+          fileName:
+          fileName,
+          contentType:
+          contentType,
         );
       },
     );
@@ -175,7 +223,8 @@ class AuthenticatedApiClient {
 
     request.headers.addAll(
       {
-        'Accept': 'application/json',
+        'Accept':
+        'application/json',
         'Authorization':
         'Bearer $accessToken',
       },
@@ -185,8 +234,10 @@ class AuthenticatedApiClient {
       http.MultipartFile.fromBytes(
         fieldName,
         bytes,
-        filename: fileName,
-        contentType: MediaType.parse(
+        filename:
+        fileName,
+        contentType:
+        MediaType.parse(
           contentType,
         ),
       ),
@@ -228,7 +279,8 @@ class AuthenticatedApiClient {
     late http.Response response;
 
     try {
-      response = await request(
+      response =
+      await request(
         accessToken,
       );
     } catch (_) {
@@ -260,7 +312,8 @@ class AuthenticatedApiClient {
     try {
       newToken =
       await AuthApi.reissue(
-        refreshToken: refreshToken,
+        refreshToken:
+        refreshToken,
       );
     } on AuthApiException catch (
     exception
@@ -288,7 +341,8 @@ class AuthenticatedApiClient {
     );
 
     try {
-      response = await request(
+      response =
+      await request(
         newToken.accessToken,
       );
     } catch (_) {

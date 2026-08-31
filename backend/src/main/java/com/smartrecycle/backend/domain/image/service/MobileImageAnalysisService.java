@@ -6,10 +6,10 @@ import com.smartrecycle.backend.domain.image.entity.ImageAnalysisStatus;
 import com.smartrecycle.backend.domain.image.entity.ImageLog;
 import com.smartrecycle.backend.domain.image.repository.ImageLogRepository;
 import com.smartrecycle.backend.domain.waste.entity.WasteItem;
-import com.smartrecycle.backend.domain.waste.repository.WasteItemRepository;
 import com.smartrecycle.backend.global.exception.CustomException;
 import com.smartrecycle.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Flutter TensorFlow Lite의
  * 1차 이미지 분석 결과를 저장하는 Service입니다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MobileImageAnalysisService {
@@ -34,12 +35,12 @@ public class MobileImageAnalysisService {
   private final ImageLogRepository
       imageLogRepository;
 
-  private final WasteItemRepository
-      wasteItemRepository;
+  private final AiWasteItemMappingService
+      aiWasteItemMappingService;
 
   /**
    * 로그인한 사용자가 업로드한 이미지에
-   * 모바일 AI 결과를 기록합니다.
+   * 모바일 TFLite 결과를 기록합니다.
    */
   @Transactional
   public MobileAnalysisResponse
@@ -48,13 +49,6 @@ public class MobileImageAnalysisService {
       Long imageLogId,
       RecordMobileAnalysisRequest request
   ) {
-    /*
-     * imageLogId만 조회하지 않고
-     * userId를 함께 조회합니다.
-     *
-     * 따라서 다른 사용자의 ImageLog에
-     * AI 결과를 기록할 수 없습니다.
-     */
     ImageLog imageLog =
         imageLogRepository
             .findByIdAndUserId(
@@ -69,53 +63,57 @@ public class MobileImageAnalysisService {
                     )
             );
 
-    /*
-     * 최초 업로드 상태에서만
-     * 모바일 AI 결과를 기록합니다.
-     *
-     * 이미 서버 재분석이 진행되었거나
-     * 결과가 확정된 ImageLog를
-     * 다시 모바일 결과로 되돌리지 않습니다.
-     */
     validateAnalysisState(
         imageLog
     );
 
+    String modelLabel =
+        request.modelLabel()
+            .trim();
+
     /*
-     * 일반 사용자 AI 결과이므로
-     * 관리자에 의해 비활성화된 품목은
-     * 새 분석 결과로 저장하지 않습니다.
+     * TFLite classId를 DB PK로 직접 사용하지 않습니다.
+     *
+     * modelLabel
+     * ↓
+     * AiWasteItemMapping
+     * ↓
+     * WasteItem
      */
     WasteItem wasteItem =
-        wasteItemRepository
-            .findByIdAndActiveTrue(
-                request.wasteItemId()
+        aiWasteItemMappingService
+            .findWasteItemByTfliteLabel(
+                modelLabel
             )
             .orElseThrow(
-                () ->
-                    new CustomException(
-                        ErrorCode
-                            .WASTE_ITEM_NOT_FOUND
-                    )
+                () -> {
+                  log.error(
+                      "TFLite label mapping not found. "
+                          + "imageLogId={}, "
+                          + "label={}, "
+                          + "modelVersion={}",
+                      imageLogId,
+                      modelLabel,
+                      request.modelVersion()
+                  );
+
+                  return new CustomException(
+                      ErrorCode
+                          .AI_MAPPING_NOT_FOUND
+                  );
+                }
             );
 
     String modelVersion =
         request.modelVersion()
             .trim();
 
-    /*
-     * 먼저 모바일 AI 결과 자체를 보존합니다.
-     */
     imageLog.recordMobileAnalysis(
         wasteItem,
         request.confidence(),
         modelVersion
     );
 
-    /*
-     * 신뢰도가 기준보다 낮은 경우
-     * Python YOLO 재분석 대기 상태로 전환합니다.
-     */
     if (
         needsServerReanalysis(
             request.confidence()
@@ -124,11 +122,6 @@ public class MobileImageAnalysisService {
       imageLog.requestServerReanalysis();
     }
 
-    /*
-     * ImageLog는 JPA 영속 상태이므로
-     * 별도의 save()가 없어도 Dirty Checking으로
-     * Transaction 종료 시 UPDATE 됩니다.
-     */
     return MobileAnalysisResponse.from(
         imageLog
     );
@@ -145,13 +138,6 @@ public class MobileImageAnalysisService {
         imageLog.getAnalysisStatus()
             != ImageAnalysisStatus.UPLOADED
     ) {
-      /*
-       * 현재 ErrorCode에는 이미지 분석 상태 전용 코드가
-       * 아직 없으므로 공통 입력 오류를 사용합니다.
-       *
-       * 서버 YOLO 단계에서 AI 상태 전환 규칙을
-       * 완성할 때 전용 ErrorCode로 분리할 예정입니다.
-       */
       throw new CustomException(
           ErrorCode.INVALID_INPUT
       );

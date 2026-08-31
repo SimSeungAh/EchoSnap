@@ -12,7 +12,8 @@ import 'package:smart_recycle/features/waste/presentation/pages/waste_search_pag
 class AppRoutes {
   AppRoutes._();
 
-  static const String splash = '/';
+  static const String splash =
+      '/';
 
   static const String login =
       '/login';
@@ -46,14 +47,16 @@ class AppRoutes {
         return MaterialPageRoute(
           builder: (_) =>
           const SplashPage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case aiCapture:
         return MaterialPageRoute(
           builder: (_) =>
           const AiCapturePage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case aiDisposalCheck:
@@ -85,6 +88,12 @@ class AppRoutes {
           'modelVersion'
           ] as String?;
 
+          final bool userCorrected =
+              arguments[
+              'userCorrected'
+              ] as bool? ??
+                  false;
+
           if (wasteItemId != null &&
               wasteItemId > 0 &&
               wasteItemName != null &&
@@ -101,8 +110,11 @@ class AppRoutes {
                     confidence,
                     modelVersion:
                     modelVersion,
+                    userCorrected:
+                    userCorrected,
                   ),
-              settings: settings,
+              settings:
+              settings,
             );
           }
         }
@@ -110,49 +122,57 @@ class AppRoutes {
         return MaterialPageRoute(
           builder: (_) =>
           const AiCapturePage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case login:
         return MaterialPageRoute(
           builder: (_) =>
           const LoginPage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case residenceSetup:
         return MaterialPageRoute(
           builder: (_) =>
           const ResidenceSetupPage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case home:
         return MaterialPageRoute(
           builder: (_) =>
           const HomePage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case wasteSearch:
         return MaterialPageRoute(
           builder: (_) =>
           const WasteSearchPage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case wasteDetail:
         final int? wasteItemId =
-        settings.arguments is int
+        settings.arguments
+        is int
             ? settings.arguments
         as int
             : null;
 
-        if (wasteItemId == null) {
+        if (wasteItemId ==
+            null) {
           return MaterialPageRoute(
             builder: (_) =>
             const WasteSearchPage(),
-            settings: settings,
+            settings:
+            settings,
           );
         }
 
@@ -162,21 +182,24 @@ class AppRoutes {
                 wasteItemId:
                 wasteItemId,
               ),
-          settings: settings,
+          settings:
+          settings,
         );
 
       case schedule:
         return MaterialPageRoute(
           builder: (_) =>
           const SchedulePage(),
-          settings: settings,
+          settings:
+          settings,
         );
 
       default:
         return MaterialPageRoute(
           builder: (_) =>
           const SplashPage(),
-          settings: settings,
+          settings:
+          settings,
         );
     }
   }

@@ -1,42 +1,65 @@
 plugins {
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+
+    // Flutter Gradle Plugin은
+    // Android / Kotlin 플러그인 이후에 적용합니다.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.smartrecycle.smart_recycle"
+
     compileSdk = flutter.compileSdkVersion
+
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility =
+            JavaVersion.VERSION_17
+
+        targetCompatibility =
+            JavaVersion.VERSION_17
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.smartrecycle.smart_recycle"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId =
+            "com.smartrecycle.smart_recycle"
+
+        /*
+         * tflite_flutter 0.12.x 실기기 사용 기준에 맞춰
+         * Android API 26 이상으로 설정합니다.
+         */
+        minSdk = 26
+
+        targetSdk =
+            flutter.targetSdkVersion
+
+        versionCode =
+            flutter.versionCode
+
+        versionName =
+            flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            /*
+             * 현재 개발 단계에서는
+             * debug signing key로 release 실행을 허용합니다.
+             */
+            signingConfig =
+                signingConfigs
+                    .getByName("debug")
         }
     }
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        jvmTarget =
+            org.jetbrains.kotlin.gradle.dsl
+                .JvmTarget
+                .JVM_17
     }
 }
 

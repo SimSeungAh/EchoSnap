@@ -35,6 +35,8 @@ import java.io.IOException;
  * ↓
  * FastAPI /analyze 호출
  * ↓
+ * 서버 AI 신뢰도 검증
+ * ↓
  * YOLO label -> WasteItem 매핑
  * ↓
  * ImageLog 서버 분석 결과 저장
@@ -42,11 +44,33 @@ import java.io.IOException;
  * AI 서버 연결 실패나 timeout처럼
  * 재시도가 가능한 장애에서는
  * SERVER_REANALYSIS_PENDING 상태를 유지합니다.
+ *
+ * YOLO가 어떤 객체를 탐지했더라도
+ * 신뢰도가 서비스 기준보다 낮으면
+ * 사용자에게 특정 품목으로 제시하지 않고
+ * ANALYSIS_FAILED로 처리합니다.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ServerImageAnalysisService {
+
+  /**
+   * 서버 YOLO 결과를
+   * 사용자에게 유효한 AI 추정으로 인정할
+   * 최소 신뢰도입니다.
+   *
+   * 예:
+   * 0.60 = 60%
+   *
+   * 모바일 TFLite는 70% 미만일 때
+   * 서버 재분석을 요청하지만,
+   * 모바일 모델과 서버 YOLO의 confidence는
+   * 서로 다른 모델에서 계산된 값이므로
+   * 동일한 임계값을 강제하지 않습니다.
+   */
+  private static final double
+      SERVER_ACCEPTANCE_THRESHOLD = 0.60;
 
   private static final String JPEG_CONTENT_TYPE =
       "image/jpeg";
@@ -149,14 +173,26 @@ public class ServerImageAnalysisService {
     );
 
     /*
-     * HTTP 호출과 YOLO 추론은 성공했지만
-     * 이미지에서 유효한 품목을 찾지 못한 경우입니다.
+     * =====================================================
+     * 1. YOLO가 객체 자체를 찾지 못한 경우
+     * =====================================================
      *
-     * 이것은 AI 서버 장애가 아니라
-     * 실제 분석 실패 결과이므로
-     * ANALYSIS_FAILED로 상태를 변경합니다.
+     * HTTP 호출과 YOLO 추론은 성공했지만
+     * 이미지에서 지원하는 폐기물 품목을
+     * 찾지 못한 경우입니다.
+     *
+     * AI 서버 장애가 아니므로
+     * ANALYSIS_FAILED로 종료합니다.
      */
     if (!yoloResponse.detected()) {
+
+      log.info(
+          "YOLO did not detect supported waste. "
+              + "imageLogId={}, "
+              + "modelVersion={}",
+          imageLogId,
+          yoloResponse.modelVersion()
+      );
 
       imageLog.markAnalysisFailed();
 
@@ -168,6 +204,69 @@ public class ServerImageAnalysisService {
     }
 
     /*
+     * =====================================================
+     * 2. 탐지는 했지만 신뢰도가 너무 낮은 경우
+     * =====================================================
+     *
+     * YOLO Object Detection 모델은
+     * 지원하지 않는 물건을 보더라도
+     * 학습된 클래스 중 하나에
+     * 낮은 confidence를 줄 수 있습니다.
+     *
+     * 예:
+     *
+     * 실제 전자기기
+     * -> can 0.339
+     *
+     * 이런 결과를 사용자에게
+     * "캔"이라고 보여주면 안 됩니다.
+     *
+     * 따라서 서버 AI confidence가
+     * 서비스 최소 기준보다 낮으면
+     * 유효한 탐지 결과로 확정하지 않습니다.
+     */
+    if (
+        !isServerResultAccepted(
+            yoloResponse
+        )
+    ) {
+
+      log.info(
+          "YOLO result rejected due to low confidence. "
+              + "imageLogId={}, "
+              + "label={}, "
+              + "confidence={}, "
+              + "threshold={}, "
+              + "modelVersion={}",
+          imageLogId,
+          yoloResponse.label(),
+          yoloResponse.confidence(),
+          SERVER_ACCEPTANCE_THRESHOLD,
+          yoloResponse.modelVersion()
+      );
+
+      imageLog.markAnalysisFailed();
+
+      /*
+       * 모바일에서는 detected=false를
+       * "최종 품목을 확실하게 찾지 못함"으로 처리합니다.
+       *
+       * classId / label / confidence 등
+       * 원본 YOLO 응답 정보는 DTO 안에 남기되,
+       * WasteItem 확정 결과는 제공하지 않습니다.
+       */
+      return ServerReanalysisResponse
+          .notDetected(
+              imageLog,
+              yoloResponse
+          );
+    }
+
+    /*
+     * =====================================================
+     * 3. 신뢰도 기준까지 통과한 결과
+     * =====================================================
+     *
      * YOLO classId를
      * WasteItem DB PK로 직접 사용하지 않습니다.
      *
@@ -217,6 +316,22 @@ public class ServerImageAnalysisService {
             imageLog,
             yoloResponse
         );
+  }
+
+  /**
+   * 서버 YOLO 결과가
+   * 사용자에게 보여줄 수 있을 정도로
+   * 충분히 신뢰할 수 있는지 판단합니다.
+   */
+  private boolean isServerResultAccepted(
+      YoloAnalysisResponse response
+  ) {
+    Double confidence =
+        response.confidence();
+
+    return confidence != null
+        && confidence
+        >= SERVER_ACCEPTANCE_THRESHOLD;
   }
 
   /**

@@ -10,6 +10,7 @@ class AiDisposalCheckPage
     required this.wasteItemName,
     required this.confidence,
     required this.modelVersion,
+    this.userCorrected = false,
   });
 
   final int wasteItemId;
@@ -19,6 +20,10 @@ class AiDisposalCheckPage
   final double? confidence;
 
   final String? modelVersion;
+
+  /// true라면 AI가 확정한 품목이 아니라
+  /// 사용자가 AI 결과를 수정해 직접 선택한 품목입니다.
+  final bool userCorrected;
 
   @override
   State<AiDisposalCheckPage> createState() =>
@@ -47,7 +52,8 @@ class _AiDisposalCheckPageState
     Navigator.pushNamed(
       context,
       AppRoutes.wasteDetail,
-      arguments: widget.wasteItemId,
+      arguments:
+      widget.wasteItemId,
     );
   }
 
@@ -81,9 +87,11 @@ class _AiDisposalCheckPageState
           40,
         ),
         children: [
-          _buildAiResultCard(),
+          _buildResultCard(),
 
-          const SizedBox(height: 22),
+          const SizedBox(
+            height: 22,
+          ),
 
           Text(
             '실제 제품을 확인해주세요',
@@ -92,10 +100,16 @@ class _AiDisposalCheckPageState
                 .titleLarge,
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(
+            height: 8,
+          ),
 
           Text(
-            'AI는 사진에서 보이는 형태를 바탕으로 '
+            widget.userCorrected
+                ? '선택한 품목을 기준으로 안내하지만, '
+                '실제 배출 방법은 제품의 재질, 오염 상태, '
+                '다른 재질의 분리 가능 여부에 따라 달라질 수 있어요.'
+                : 'AI는 사진에서 보이는 형태를 바탕으로 '
                 '품목을 추정합니다. 실제 배출 방법은 '
                 '제품의 재질, 오염 상태, 다른 재질의 '
                 '분리 가능 여부에 따라 달라질 수 있어요.',
@@ -107,10 +121,13 @@ class _AiDisposalCheckPageState
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(
+            height: 18,
+          ),
 
           _CheckCard(
-            value: _materialChecked,
+            value:
+            _materialChecked,
             icon:
             Icons.sell_outlined,
             title:
@@ -118,7 +135,9 @@ class _AiDisposalCheckPageState
             description:
             '용기 바닥이나 라벨 등에 표시된 '
                 '재질과 분리배출 표시를 직접 확인해주세요.',
-            onChanged: (value) {
+            onChanged: (
+                value,
+                ) {
               setState(() {
                 _materialChecked =
                     value;
@@ -126,19 +145,25 @@ class _AiDisposalCheckPageState
             },
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
 
           _CheckCard(
-            value: _contaminationChecked,
+            value:
+            _contaminationChecked,
             icon:
-            Icons.cleaning_services_outlined,
+            Icons
+                .cleaning_services_outlined,
             title:
             '내용물과 오염 상태를 확인했나요?',
             description:
             '내용물이 많이 남아 있거나 '
                 '깨끗하게 제거하기 어려우면 '
                 '재활용이 어려울 수 있어요.',
-            onChanged: (value) {
+            onChanged: (
+                value,
+                ) {
               setState(() {
                 _contaminationChecked =
                     value;
@@ -146,18 +171,24 @@ class _AiDisposalCheckPageState
             },
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
 
           _CheckCard(
-            value: _separationChecked,
+            value:
+            _separationChecked,
             icon:
-            Icons.call_split_rounded,
+            Icons
+                .call_split_rounded,
             title:
             '다른 재질의 부품을 분리할 수 있는지 확인했나요?',
             description:
             '뚜껑, 펌프, 라벨 등 다른 재질이 '
                 '붙어 있다면 분리 가능 여부를 확인해주세요.',
-            onChanged: (value) {
+            onChanged: (
+                value,
+                ) {
               setState(() {
                 _separationChecked =
                     value;
@@ -165,15 +196,20 @@ class _AiDisposalCheckPageState
             },
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(
+            height: 20,
+          ),
 
           _buildNotice(),
 
-          const SizedBox(height: 24),
+          const SizedBox(
+            height: 24,
+          ),
 
           SizedBox(
             height: 52,
-            child: ElevatedButton.icon(
+            child:
+            ElevatedButton.icon(
               onPressed:
               _allChecked
                   ? _openWasteDetail
@@ -188,7 +224,9 @@ class _AiDisposalCheckPageState
             ),
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(
+            height: 10,
+          ),
 
           TextButton(
             onPressed: () {
@@ -196,8 +234,10 @@ class _AiDisposalCheckPageState
                 context,
               );
             },
-            child: const Text(
-              '사진과 AI 결과 다시 보기',
+            child: Text(
+              widget.userCorrected
+                  ? '사진과 선택한 품목 다시 보기'
+                  : '사진과 AI 결과 다시 보기',
             ),
           ),
         ],
@@ -205,7 +245,10 @@ class _AiDisposalCheckPageState
     );
   }
 
-  Widget _buildAiResultCard() {
+  Widget _buildResultCard() {
+    final bool corrected =
+        widget.userCorrected;
+
     return Container(
       padding:
       const EdgeInsets.all(
@@ -246,8 +289,11 @@ class _AiDisposalCheckPageState
                     14,
                   ),
                 ),
-                child: const Icon(
-                  Icons
+                child: Icon(
+                  corrected
+                      ? Icons
+                      .fact_check_outlined
+                      : Icons
                       .auto_awesome_rounded,
                   color: AppTheme
                       .primaryColor,
@@ -258,27 +304,34 @@ class _AiDisposalCheckPageState
                 width: 12,
               ),
 
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  CrossAxisAlignment
+                      .start,
                   children: [
                     Text(
-                      'AI 추정 결과',
-                      style: TextStyle(
+                      corrected
+                          ? '사용자가 확인한 품목'
+                          : 'AI 추정 결과',
+                      style:
+                      const TextStyle(
                         fontWeight:
                         FontWeight.w800,
                         fontSize: 16,
                       ),
                     ),
 
-                    SizedBox(
+                    const SizedBox(
                       height: 3,
                     ),
 
                     Text(
-                      '확정된 재활용 판정이 아닙니다.',
-                      style: TextStyle(
+                      corrected
+                          ? 'AI 결과를 수정해 직접 선택한 품목이에요.'
+                          : '확정된 재활용 판정이 아닙니다.',
+                      style:
+                      const TextStyle(
                         color: AppTheme
                             .textSecondaryColor,
                         fontSize: 12,
@@ -295,21 +348,27 @@ class _AiDisposalCheckPageState
           ),
 
           _InfoRow(
-            label: '추정 품목',
+            label:
+            corrected
+                ? '선택 품목'
+                : '추정 품목',
             value:
             widget.wasteItemName,
           ),
 
-          _InfoRow(
-            label: 'AI 신뢰도',
-            value:
-            _confidenceText(),
-          ),
-
-          if (widget.modelVersion !=
-              null)
+          if (!corrected)
             _InfoRow(
-              label: '사용 모델',
+              label:
+              'AI 신뢰도',
+              value:
+              _confidenceText(),
+            ),
+
+          if (!corrected &&
+              widget.modelVersion != null)
+            _InfoRow(
+              label:
+              '사용 모델',
               value:
               widget.modelVersion!,
             ),
@@ -343,7 +402,9 @@ class _AiDisposalCheckPageState
             size: 21,
           ),
 
-          SizedBox(width: 10),
+          SizedBox(
+            width: 10,
+          ),
 
           Expanded(
             child: Text(
@@ -353,7 +414,8 @@ class _AiDisposalCheckPageState
                   '다음 화면의 품목별 배출 방법과 '
                   '현재 거주지의 배출 기준을 함께 '
                   '확인해주세요.',
-              style: TextStyle(
+              style:
+              TextStyle(
                 height: 1.45,
               ),
             ),
@@ -382,7 +444,8 @@ class _CheckCard
 
   final String description;
 
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>
+  onChanged;
 
   @override
   Widget build(
@@ -411,7 +474,8 @@ class _CheckCard
           ),
           border: Border.all(
             color: value
-                ? AppTheme.primaryColor
+                ? AppTheme
+                .primaryColor
                 .withValues(
               alpha: 0.45,
             )
@@ -443,8 +507,8 @@ class _CheckCard
               ),
               child: Icon(
                 icon,
-                color:
-                AppTheme.primaryColor,
+                color: AppTheme
+                    .primaryColor,
               ),
             ),
 
@@ -455,7 +519,8 @@ class _CheckCard
             Expanded(
               child: Column(
                 crossAxisAlignment:
-                CrossAxisAlignment.start,
+                CrossAxisAlignment
+                    .start,
                 children: [
                   Text(
                     title,
@@ -489,7 +554,8 @@ class _CheckCard
             ),
 
             Checkbox(
-              value: value,
+              value:
+              value,
               onChanged: (
                   checked,
                   ) {

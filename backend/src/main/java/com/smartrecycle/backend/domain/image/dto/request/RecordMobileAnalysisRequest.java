@@ -9,16 +9,35 @@ import jakarta.validation.constraints.Size;
 /**
  * Flutter TensorFlow Lite가 수행한
  * 모바일 AI 1차 분석 결과입니다.
+ *
+ * AI 모델의 classId를 DB의 WasteItem ID로
+ * 직접 사용하지 않습니다.
+ *
+ * Flutter에서는 실제 모델 label을 전달하고,
+ * Spring Boot에서 해당 label을 WasteItem으로
+ * 매핑합니다.
  */
 public record RecordMobileAnalysisRequest(
 
     /**
-     * TensorFlow Lite가 예측한 WasteItem ID
+     * TensorFlow Lite가 예측한 실제 모델 label
+     *
+     * 예:
+     * cardboard_box
+     * pet_bottle
+     * plastic_container
+     * can
+     * glass_bottle
+     * styrofoam
      */
-    @NotNull(
-        message = "분석된 폐기물 품목은 필수입니다."
+    @NotBlank(
+        message = "모바일 AI 모델 라벨은 필수입니다."
     )
-    Long wasteItemId,
+    @Size(
+        max = 150,
+        message = "모바일 AI 모델 라벨은 150자 이하여야 합니다."
+    )
+    String modelLabel,
 
     /**
      * 모델 신뢰도
@@ -46,7 +65,7 @@ public record RecordMobileAnalysisRequest(
      * TensorFlow Lite 모델 버전
      *
      * 예:
-     * waste-classifier-v1.0
+     * smartrecycle-tflite-v1
      */
     @NotBlank(
         message = "모바일 AI 모델 버전은 필수입니다."

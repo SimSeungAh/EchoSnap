@@ -22,20 +22,22 @@ import java.util.Optional;
 public class AiWasteItemMappingService {
 
   /**
-   * 현재 Python YOLO 서버에서 사용하는
-   * 모델 계열 식별자입니다.
-   *
-   * modelVersion과는 다릅니다.
-   *
-   * modelName:
-   * 매핑 체계 식별
-   *
-   * modelVersion:
-   * 실제 추론에 사용된 모델 버전 기록
+   * Python YOLO 서버 모델 계열 식별자입니다.
    */
   public static final String
       YOLO_MODEL_NAME =
       "SMARTRECYCLE_YOLO";
+
+  /**
+   * Flutter TensorFlow Lite 모델 계열 식별자입니다.
+   *
+   * 서버 YOLO와 모바일 TFLite가
+   * 같은 label 문자열을 사용하더라도
+   * 모델 계열을 분리해 관리합니다.
+   */
+  public static final String
+      TFLITE_MODEL_NAME =
+      "SMARTRECYCLE_TFLITE";
 
   private final AiWasteItemMappingRepository
       aiWasteItemMappingRepository;
@@ -43,15 +45,43 @@ public class AiWasteItemMappingService {
   /**
    * YOLO가 반환한 label에 해당하는
    * 활성 WasteItem을 조회합니다.
-   *
-   * 매핑이 없을 경우 Optional.empty()를 반환합니다.
-   *
-   * AI가 새로운 label을 반환했다고 해서
-   * 문자열을 이용해 임의의 WasteItem을 추측하지 않습니다.
    */
   @Transactional(readOnly = true)
   public Optional<WasteItem>
   findWasteItemByYoloLabel(
+      String label
+  ) {
+    return findWasteItemByModelLabel(
+        YOLO_MODEL_NAME,
+        label
+    );
+  }
+
+  /**
+   * Flutter TFLite가 반환한 label에 해당하는
+   * 활성 WasteItem을 조회합니다.
+   */
+  @Transactional(readOnly = true)
+  public Optional<WasteItem>
+  findWasteItemByTfliteLabel(
+      String label
+  ) {
+    return findWasteItemByModelLabel(
+        TFLITE_MODEL_NAME,
+        label
+    );
+  }
+
+  /**
+   * 공통 AI label 매핑 조회 로직입니다.
+   *
+   * 매핑이 없을 경우 문자열 이름으로
+   * 임의의 WasteItem을 추측하지 않고
+   * Optional.empty()를 반환합니다.
+   */
+  private Optional<WasteItem>
+  findWasteItemByModelLabel(
+      String modelName,
       String label
   ) {
     if (
@@ -63,16 +93,12 @@ public class AiWasteItemMappingService {
 
     return aiWasteItemMappingRepository
         .findByModelNameIgnoreCaseAndModelLabelIgnoreCaseAndActiveTrue(
-            YOLO_MODEL_NAME,
+            modelName,
             label.trim()
         )
         .map(
             AiWasteItemMapping::getWasteItem
         )
-        /*
-         * 관리자에 의해 숨겨진 WasteItem을
-         * 새로운 AI 분석 결과로 제공하지 않습니다.
-         */
         .filter(
             WasteItem::isActive
         );

@@ -7,7 +7,17 @@ import 'package:smart_recycle/features/waste/data/waste_search_api.dart';
 class WasteSearchPage extends StatefulWidget {
   const WasteSearchPage({
     super.key,
+    this.selectionMode = false,
   });
+
+  /// false:
+  /// 일반 품목 검색
+  /// -> 품목 상세 페이지 이동
+  ///
+  /// true:
+  /// AI 정정용 품목 선택
+  /// -> 선택된 WasteSearchItem을 pop으로 반환
+  final bool selectionMode;
 
   @override
   State<WasteSearchPage> createState() =>
@@ -16,19 +26,26 @@ class WasteSearchPage extends StatefulWidget {
 
 class _WasteSearchPageState
     extends State<WasteSearchPage> {
-  final TextEditingController _searchController =
+  final TextEditingController
+  _searchController =
   TextEditingController();
 
-  List<WasteCategoryItem> _categories = const [];
-  List<WasteSearchItem> _items = const [];
+  List<WasteCategoryItem> _categories =
+  const [];
+
+  List<WasteSearchItem> _items =
+  const [];
 
   int? _selectedCategoryId;
 
   int _currentPage = 0;
+
   int _totalElements = 0;
 
   bool _isLoading = true;
+
   bool _isLoadingMore = false;
+
   bool _isLastPage = true;
 
   String? _errorMessage;
@@ -43,6 +60,7 @@ class _WasteSearchPageState
   @override
   void dispose() {
     _searchController.dispose();
+
     super.dispose();
   }
 
@@ -60,23 +78,29 @@ class _WasteSearchPageState
 
   Future<void> _loadCategories() async {
     try {
-      final categories =
-      await WasteSearchApi.getCategories();
+      final List<WasteCategoryItem>
+      categories =
+      await WasteSearchApi
+          .getCategories();
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _categories = categories;
+        _categories =
+            categories;
       });
-    } on WasteSearchApiException catch (exception) {
+    } on WasteSearchApiException catch (
+    exception
+    ) {
       if (!mounted) {
         return;
       }
 
       if (exception.unauthorized) {
         await _moveToLogin();
+
         return;
       }
 
@@ -93,30 +117,39 @@ class _WasteSearchPageState
       return;
     }
 
-    if (!reset && _isLastPage) {
+    if (!reset &&
+        _isLastPage) {
       return;
     }
 
-    final nextPage =
-    reset ? 0 : _currentPage + 1;
+    final int nextPage =
+    reset
+        ? 0
+        : _currentPage + 1;
 
     if (reset) {
       setState(() {
         _isLoading = true;
+
         _errorMessage = null;
       });
     } else {
       setState(() {
-        _isLoadingMore = true;
+        _isLoadingMore =
+        true;
       });
     }
 
     try {
-      final result =
-      await WasteSearchApi.searchItems(
-        keyword: _searchController.text,
-        page: nextPage,
-        categoryId: _selectedCategoryId,
+      final WasteSearchResult result =
+      await WasteSearchApi
+          .searchItems(
+        keyword:
+        _searchController.text,
+        page:
+        nextPage,
+        categoryId:
+        _selectedCategoryId,
       );
 
       if (!mounted) {
@@ -125,7 +158,8 @@ class _WasteSearchPageState
 
       setState(() {
         if (reset) {
-          _items = result.items;
+          _items =
+              result.items;
         } else {
           _items = [
             ..._items,
@@ -133,26 +167,41 @@ class _WasteSearchPageState
           ];
         }
 
-        _currentPage = result.page;
-        _totalElements = result.totalElements;
-        _isLastPage = result.last;
-        _errorMessage = null;
+        _currentPage =
+            result.page;
+
+        _totalElements =
+            result.totalElements;
+
+        _isLastPage =
+            result.last;
+
+        _errorMessage =
+        null;
       });
-    } on WasteSearchApiException catch (exception) {
+    } on WasteSearchApiException catch (
+    exception
+    ) {
       if (!mounted) {
         return;
       }
 
       if (exception.unauthorized) {
         await _moveToLogin();
+
         return;
       }
 
       if (reset) {
         setState(() {
-          _items = const [];
-          _totalElements = 0;
-          _errorMessage = exception.message;
+          _items =
+          const [];
+
+          _totalElements =
+          0;
+
+          _errorMessage =
+              exception.message;
         });
       } else {
         _showMessage(
@@ -166,13 +215,17 @@ class _WasteSearchPageState
 
       setState(() {
         _errorMessage =
-        '품목 정보를 불러오는 중 오류가 발생했습니다.';
+        '품목 정보를 불러오는 중 '
+            '오류가 발생했습니다.';
       });
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
-          _isLoadingMore = false;
+          _isLoading =
+          false;
+
+          _isLoadingMore =
+          false;
         });
       }
     }
@@ -181,12 +234,14 @@ class _WasteSearchPageState
   Future<void> _selectCategory(
       int? categoryId,
       ) async {
-    if (_selectedCategoryId == categoryId) {
+    if (_selectedCategoryId ==
+        categoryId) {
       return;
     }
 
     setState(() {
-      _selectedCategoryId = categoryId;
+      _selectedCategoryId =
+          categoryId;
     });
 
     await _search(
@@ -215,7 +270,9 @@ class _WasteSearchPageState
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(
+            message,
+          ),
         ),
       );
   }
@@ -223,34 +280,118 @@ class _WasteSearchPageState
   void _openItem(
       WasteSearchItem item,
       ) {
+    /*
+     * AI 정정 화면에서 들어온 경우에는
+     * 상세 화면으로 이동하지 않고
+     * 사용자가 선택한 품목을
+     * 이전 화면에 그대로 반환합니다.
+     */
+    if (widget.selectionMode) {
+      Navigator.pop(
+        context,
+        item,
+      );
+
+      return;
+    }
+
+    /*
+     * 일반 검색 화면에서는
+     * 기존 동작을 그대로 유지합니다.
+     */
     Navigator.pushNamed(
       context,
       AppRoutes.wasteDetail,
-      arguments: item.id,
+      arguments:
+      item.id,
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context,
+      ) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '품목 검색',
+        title: Text(
+          widget.selectionMode
+              ? '올바른 품목 선택'
+              : '품목 검색',
         ),
       ),
       body: SafeArea(
         top: false,
         child: Column(
           children: [
+            if (widget.selectionMode)
+              Container(
+                width:
+                double.infinity,
+                margin:
+                const EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  20,
+                  4,
+                ),
+                padding:
+                const EdgeInsets.all(
+                  15,
+                ),
+                decoration:
+                BoxDecoration(
+                  color: AppTheme
+                      .primaryColor
+                      .withValues(
+                    alpha: 0.08,
+                  ),
+                  borderRadius:
+                  BorderRadius.circular(
+                    16,
+                  ),
+                ),
+                child: const Row(
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons
+                          .fact_check_outlined,
+                      color: AppTheme
+                          .primaryColor,
+                      size: 21,
+                    ),
+                    SizedBox(
+                      width: 10,
+                    ),
+                    Expanded(
+                      child: Text(
+                        'AI 추정과 다른 실제 품목을 '
+                            '선택해주세요. 선택한 결과는 '
+                            '더 정확한 AI 개선을 위한 '
+                            '검수 자료로 활용할 수 있어요.',
+                        style:
+                        TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+              const EdgeInsets.fromLTRB(
                 20,
                 8,
                 20,
                 0,
               ),
               child: TextField(
-                controller: _searchController,
+                controller:
+                _searchController,
                 textInputAction:
                 TextInputAction.search,
                 onSubmitted: (_) {
@@ -258,58 +399,79 @@ class _WasteSearchPageState
                     reset: true,
                   );
                 },
-                decoration: InputDecoration(
-                  hintText: '예: 페트병, 종이박스, 캔',
-                  prefixIcon: const Icon(
+                decoration:
+                InputDecoration(
+                  hintText:
+                  '예: 페트병, 종이박스, 캔',
+                  prefixIcon:
+                  const Icon(
                     Icons.search_rounded,
                   ),
-                  suffixIcon: IconButton(
-                    tooltip: '검색',
+                  suffixIcon:
+                  IconButton(
+                    tooltip:
+                    '검색',
                     onPressed: () {
                       _search(
                         reset: true,
                       );
                     },
-                    icon: const Icon(
-                      Icons.arrow_forward_rounded,
+                    icon:
+                    const Icon(
+                      Icons
+                          .arrow_forward_rounded,
                     ),
                   ),
                 ),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(
+              height: 16,
+            ),
 
             if (_categories.isNotEmpty)
               SizedBox(
                 height: 42,
                 child: ListView(
-                  scrollDirection: Axis.horizontal,
+                  scrollDirection:
+                  Axis.horizontal,
                   padding:
                   const EdgeInsets.symmetric(
                     horizontal: 20,
                   ),
                   children: [
                     _CategoryChip(
-                      label: '전체',
+                      label:
+                      '전체',
                       selected:
-                      _selectedCategoryId == null,
+                      _selectedCategoryId ==
+                          null,
                       onTap: () {
-                        _selectCategory(null);
+                        _selectCategory(
+                          null,
+                        );
                       },
                     ),
 
-                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 8,
+                    ),
 
                     ..._categories.map(
-                          (category) {
+                          (
+                          WasteCategoryItem
+                          category,
+                          ) {
                         return Padding(
                           padding:
                           const EdgeInsets.only(
                             right: 8,
                           ),
-                          child: _CategoryChip(
-                            label: category.name,
+                          child:
+                          _CategoryChip(
+                            label:
+                            category.name,
                             selected:
                             _selectedCategoryId ==
                                 category.id,
@@ -326,10 +488,13 @@ class _WasteSearchPageState
                 ),
               ),
 
-            const SizedBox(height: 16),
+            const SizedBox(
+              height: 16,
+            ),
 
             Expanded(
-              child: _buildContent(),
+              child:
+              _buildContent(),
             ),
           ],
         ),
@@ -340,32 +505,43 @@ class _WasteSearchPageState
   Widget _buildContent() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(),
+        child:
+        CircularProgressIndicator(),
       );
     }
 
     if (_errorMessage != null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding:
+          const EdgeInsets.all(
+            32,
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize:
+            MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline_rounded,
+                Icons
+                    .error_outline_rounded,
                 size: 46,
-                color:
-                AppTheme.textSecondaryColor,
+                color: AppTheme
+                    .textSecondaryColor,
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(
+                height: 14,
+              ),
 
               Text(
                 _errorMessage!,
-                textAlign: TextAlign.center,
+                textAlign:
+                TextAlign.center,
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(
+                height: 18,
+              ),
 
               ElevatedButton(
                 onPressed: () {
@@ -384,52 +560,75 @@ class _WasteSearchPageState
     }
 
     if (_items.isEmpty) {
-      final keyword =
-      _searchController.text.trim();
+      final String keyword =
+      _searchController.text
+          .trim();
 
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding:
+          const EdgeInsets.all(
+            32,
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize:
+            MainAxisSize.min,
             children: [
               Container(
                 width: 64,
                 height: 64,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor
+                decoration:
+                BoxDecoration(
+                  color: AppTheme
+                      .primaryColor
                       .withValues(
                     alpha: 0.08,
                   ),
                   borderRadius:
-                  BorderRadius.circular(20),
+                  BorderRadius.circular(
+                    20,
+                  ),
                 ),
                 child: const Icon(
-                  Icons.search_off_rounded,
+                  Icons
+                      .search_off_rounded,
                   size: 32,
-                  color:
-                  AppTheme.primaryColor,
+                  color: AppTheme
+                      .primaryColor,
                 ),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(
+                height: 18,
+              ),
 
               Text(
                 keyword.isEmpty
                     ? '등록된 품목이 없습니다.'
                     : '\'$keyword\' 검색 결과가 없습니다.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
+                textAlign:
+                TextAlign.center,
+                style:
+                Theme.of(
+                  context,
+                )
                     .textTheme
                     .titleMedium,
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(
+                height: 8,
+              ),
 
               Text(
-                '다른 품목명이나 키워드로 검색해보세요.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
+                '다른 품목명이나 '
+                    '키워드로 검색해보세요.',
+                textAlign:
+                TextAlign.center,
+                style:
+                Theme.of(
+                  context,
+                )
                     .textTheme
                     .bodyMedium,
               ),
@@ -446,7 +645,8 @@ class _WasteSearchPageState
         );
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(
+        padding:
+        const EdgeInsets.fromLTRB(
           20,
           0,
           20,
@@ -454,8 +654,13 @@ class _WasteSearchPageState
         ),
         children: [
           Text(
-            '총 $_totalElements개의 품목',
-            style: Theme.of(context)
+            widget.selectionMode
+                ? '올바른 품목을 눌러 선택해주세요.'
+                : '총 $_totalElements개의 품목',
+            style:
+            Theme.of(
+              context,
+            )
                 .textTheme
                 .bodyMedium
                 ?.copyWith(
@@ -463,24 +668,35 @@ class _WasteSearchPageState
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
 
           ..._items.map(
-                (item) {
+                (
+                WasteSearchItem item,
+                ) {
               return Padding(
-                padding: const EdgeInsets.only(
+                padding:
+                const EdgeInsets.only(
                   bottom: 10,
                 ),
                 child: Card(
                   child: InkWell(
                     onTap: () {
-                      _openItem(item);
+                      _openItem(
+                        item,
+                      );
                     },
                     borderRadius:
-                    BorderRadius.circular(20),
+                    BorderRadius.circular(
+                      20,
+                    ),
                     child: Padding(
                       padding:
-                      const EdgeInsets.all(16),
+                      const EdgeInsets.all(
+                        16,
+                      ),
                       child: Row(
                         children: [
                           _WasteImage(
@@ -500,7 +716,8 @@ class _WasteSearchPageState
                               children: [
                                 Text(
                                   item.name,
-                                  style: Theme.of(
+                                  style:
+                                  Theme.of(
                                     context,
                                   )
                                       .textTheme
@@ -512,25 +729,33 @@ class _WasteSearchPageState
                                 ),
 
                                 Text(
-                                  item.category.name,
-                                  style: Theme.of(
+                                  item.category
+                                      .name,
+                                  style:
+                                  Theme.of(
                                     context,
                                   )
                                       .textTheme
                                       .bodyMedium
                                       ?.copyWith(
-                                    fontSize:
-                                    13,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ],
                             ),
                           ),
 
-                          const Icon(
-                            Icons
+                          Icon(
+                            widget.selectionMode
+                                ? Icons
+                                .check_circle_outline_rounded
+                                : Icons
                                 .chevron_right_rounded,
-                            color: AppTheme
+                            color: widget
+                                .selectionMode
+                                ? AppTheme
+                                .primaryColor
+                                : AppTheme
                                 .textSecondaryColor,
                           ),
                         ],
@@ -544,24 +769,29 @@ class _WasteSearchPageState
 
           if (!_isLastPage)
             Padding(
-              padding: const EdgeInsets.only(
+              padding:
+              const EdgeInsets.only(
                 top: 8,
               ),
-              child: OutlinedButton(
-                onPressed: _isLoadingMore
+              child:
+              OutlinedButton(
+                onPressed:
+                _isLoadingMore
                     ? null
                     : () {
                   _search(
                     reset: false,
                   );
                 },
-                child: _isLoadingMore
+                child:
+                _isLoadingMore
                     ? const SizedBox(
                   width: 20,
                   height: 20,
                   child:
                   CircularProgressIndicator(
-                    strokeWidth: 2,
+                    strokeWidth:
+                    2,
                   ),
                 )
                     : const Text(
@@ -575,7 +805,8 @@ class _WasteSearchPageState
   }
 }
 
-class _CategoryChip extends StatelessWidget {
+class _CategoryChip
+    extends StatelessWidget {
   const _CategoryChip({
     required this.label,
     required this.selected,
@@ -583,32 +814,48 @@ class _CategoryChip extends StatelessWidget {
   });
 
   final String label;
+
   final bool selected;
+
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context,
+      ) {
     return ChoiceChip(
-      label: Text(label),
-      selected: selected,
+      label: Text(
+        label,
+      ),
+      selected:
+      selected,
       onSelected: (_) {
         onTap();
       },
       selectedColor:
-      AppTheme.primaryColor.withValues(
+      AppTheme.primaryColor
+          .withValues(
         alpha: 0.12,
       ),
-      showCheckmark: false,
+      showCheckmark:
+      false,
       side: BorderSide(
         color: selected
-            ? AppTheme.primaryColor
-            : const Color(0xFFDCE4E0),
+            ? AppTheme
+            .primaryColor
+            : const Color(
+          0xFFDCE4E0,
+        ),
       ),
-      labelStyle: TextStyle(
+      labelStyle:
+      TextStyle(
         color: selected
-            ? AppTheme.primaryColor
-            : AppTheme.textPrimaryColor,
-        fontWeight: selected
+            ? AppTheme
+            .primaryColor
+            : AppTheme
+            .textPrimaryColor,
+        fontWeight:
+        selected
             ? FontWeight.w700
             : FontWeight.w500,
       ),
@@ -624,39 +871,53 @@ class _WasteImage extends StatelessWidget {
   final String? imageUrl;
 
   @override
-  Widget build(BuildContext context) {
-    final url = imageUrl?.trim();
+  Widget build(
+      BuildContext context,
+      ) {
+    final String? url =
+    imageUrl?.trim();
 
     return Container(
       width: 58,
       height: 58,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color:
-        AppTheme.primaryColor.withValues(
+      clipBehavior:
+      Clip.antiAlias,
+      decoration:
+      BoxDecoration(
+        color: AppTheme
+            .primaryColor
+            .withValues(
           alpha: 0.08,
         ),
         borderRadius:
-        BorderRadius.circular(16),
+        BorderRadius.circular(
+          16,
+        ),
       ),
-      child: url == null || url.isEmpty
+      child:
+      url == null ||
+          url.isEmpty
           ? const Icon(
-        Icons.recycling_rounded,
-        color: AppTheme.primaryColor,
+        Icons
+            .recycling_rounded,
+        color: AppTheme
+            .primaryColor,
         size: 28,
       )
           : Image.network(
         url,
-        fit: BoxFit.cover,
+        fit:
+        BoxFit.cover,
         errorBuilder: (
             context,
             error,
             stackTrace,
             ) {
           return const Icon(
-            Icons.recycling_rounded,
-            color:
-            AppTheme.primaryColor,
+            Icons
+                .recycling_rounded,
+            color: AppTheme
+                .primaryColor,
             size: 28,
           );
         },

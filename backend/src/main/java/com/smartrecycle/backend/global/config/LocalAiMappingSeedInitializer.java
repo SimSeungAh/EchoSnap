@@ -10,17 +10,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * local 개발환경에서
- * Python YOLO 모델 label과
- * SmartRecycle WasteItem의 기본 매핑을 생성합니다.
+ * AI 모델 label과 SmartRecycle WasteItem의
+ * 기본 매핑을 생성합니다.
  *
- * YOLO classId를 WasteItem PK로 직접 사용하지 않고
- * modelName + modelLabel 기준으로 명시적으로 연결합니다.
- *
- * ApplicationReadyEvent에서 실행하는 이유:
- *
- * LocalWasteSeedInitializer가 먼저
- * WasteCategory / WasteItem을 생성한 이후에
- * AI 매핑을 등록하기 위해서입니다.
+ * YOLO와 Flutter TFLite를 서로 다른
+ * modelName으로 분리하여 관리합니다.
  */
 @Slf4j
 @Component
@@ -29,8 +23,13 @@ import org.springframework.stereotype.Component;
 public class LocalAiMappingSeedInitializer
     implements ApplicationListener<ApplicationReadyEvent> {
 
-  private static final String MODEL_NAME =
+  private static final String
+      YOLO_MODEL_NAME =
       "SMARTRECYCLE_YOLO";
+
+  private static final String
+      TFLITE_MODEL_NAME =
+      "SMARTRECYCLE_TFLITE";
 
   private final JdbcTemplate jdbcTemplate;
 
@@ -38,50 +37,76 @@ public class LocalAiMappingSeedInitializer
   public void onApplicationEvent(
       ApplicationReadyEvent event
   ) {
-    seedMappings();
+    seedYoloMappings();
+    seedTfliteMappings();
   }
 
-  private void seedMappings() {
-
-    /*
-     * 현재 YOLO 학습 클래스 순서와
-     * SmartRecycle WasteItem의 연결입니다.
-     *
-     * cardboard -> 종이박스
-     * pet       -> 페트병
-     * plastic   -> 플라스틱 용기
-     * can       -> 캔
-     * glass     -> 유리병
-     * styro     -> 스티로폼
-     */
-
+  /**
+   * 현재 서버 YOLO의 기존 label과
+   * 최신 학습 데이터 label을 모두 허용합니다.
+   *
+   * 기존 개발 데이터와 새 모델이 섞여 있어도
+   * label 변경 때문에 분석이 깨지지 않도록
+   * 호환 alias를 함께 등록합니다.
+   */
+  private void seedYoloMappings() {
     upsertMapping(
+        YOLO_MODEL_NAME,
         "cardboard",
         "종이박스"
     );
 
     upsertMapping(
+        YOLO_MODEL_NAME,
+        "cardboard_box",
+        "종이박스"
+    );
+
+    upsertMapping(
+        YOLO_MODEL_NAME,
         "pet",
         "페트병"
     );
 
     upsertMapping(
+        YOLO_MODEL_NAME,
+        "pet_bottle",
+        "페트병"
+    );
+
+    upsertMapping(
+        YOLO_MODEL_NAME,
         "plastic_container",
         "플라스틱 용기"
     );
 
     upsertMapping(
+        YOLO_MODEL_NAME,
         "can",
         "캔"
     );
 
     upsertMapping(
+        YOLO_MODEL_NAME,
         "glass",
         "유리병"
     );
 
     upsertMapping(
+        YOLO_MODEL_NAME,
+        "glass_bottle",
+        "유리병"
+    );
+
+    upsertMapping(
+        YOLO_MODEL_NAME,
         "styro",
+        "스티로폼"
+    );
+
+    upsertMapping(
+        YOLO_MODEL_NAME,
+        "styrofoam",
         "스티로폼"
     );
 
@@ -91,12 +116,61 @@ public class LocalAiMappingSeedInitializer
   }
 
   /**
-   * 이미 같은 modelName + modelLabel의 매핑이 존재하면
-   * WasteItem 연결과 활성 상태를 최신 개발 기준으로 갱신합니다.
+   * Flutter TFLite에서 사용할
+   * 6개 표준 label 매핑입니다.
    *
+   * labels.txt의 순서/문자열도
+   * 아래 값과 동일하게 맞춥니다.
+   */
+  private void seedTfliteMappings() {
+    upsertMapping(
+        TFLITE_MODEL_NAME,
+        "cardboard_box",
+        "종이박스"
+    );
+
+    upsertMapping(
+        TFLITE_MODEL_NAME,
+        "pet_bottle",
+        "페트병"
+    );
+
+    upsertMapping(
+        TFLITE_MODEL_NAME,
+        "plastic_container",
+        "플라스틱 용기"
+    );
+
+    upsertMapping(
+        TFLITE_MODEL_NAME,
+        "can",
+        "캔"
+    );
+
+    upsertMapping(
+        TFLITE_MODEL_NAME,
+        "glass_bottle",
+        "유리병"
+    );
+
+    upsertMapping(
+        TFLITE_MODEL_NAME,
+        "styrofoam",
+        "스티로폼"
+    );
+
+    log.info(
+        "Local TFLite WasteItem mapping seed completed."
+    );
+  }
+
+  /**
+   * 같은 modelName + modelLabel의 매핑이 존재하면
+   * WasteItem 연결과 활성 상태를 갱신하고,
    * 존재하지 않으면 새 매핑을 생성합니다.
    */
   private void upsertMapping(
+      String modelName,
       String modelLabel,
       String wasteItemName
   ) {
@@ -113,13 +187,14 @@ public class LocalAiMappingSeedInitializer
               AND mapping.model_label = ?
             """,
             wasteItemName,
-            MODEL_NAME,
+            modelName,
             modelLabel
         );
 
     if (updatedCount > 0) {
       log.info(
-          "YOLO mapping updated. label={}, wasteItem={}",
+          "AI mapping updated. model={}, label={}, wasteItem={}",
+          modelName,
           modelLabel,
           wasteItemName
       );
@@ -150,15 +225,16 @@ public class LocalAiMappingSeedInitializer
                 AND mapping.model_label = ?
           )
         """,
-        MODEL_NAME,
+        modelName,
         modelLabel,
         wasteItemName,
-        MODEL_NAME,
+        modelName,
         modelLabel
     );
 
     log.info(
-        "YOLO mapping checked. label={}, wasteItem={}",
+        "AI mapping checked. model={}, label={}, wasteItem={}",
+        modelName,
         modelLabel,
         wasteItemName
     );

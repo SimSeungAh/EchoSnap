@@ -1,15 +1,17 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:smart_recycle/app/app_routes.dart';
 import 'package:smart_recycle/core/storage/token_storage.dart';
 import 'package:smart_recycle/core/theme/app_theme.dart';
-import 'package:smart_recycle/features/ai/data/ai_mock_analysis_api.dart';
+import 'package:smart_recycle/features/ai/data/image_correction_api.dart';
 import 'package:smart_recycle/features/ai/data/image_upload_api.dart';
+import 'package:smart_recycle/features/ai/data/mobile_analysis_api.dart';
 import 'package:smart_recycle/features/ai/data/server_reanalysis_api.dart';
+import 'package:smart_recycle/features/ai/data/tflite_waste_detector.dart';
+import 'package:smart_recycle/features/ai/presentation/widgets/ai_analysis_result_card.dart';
 import 'package:smart_recycle/features/waste/data/waste_search_api.dart';
+import 'package:smart_recycle/features/waste/presentation/pages/waste_search_page.dart';
 
 class AiCapturePage
     extends StatefulWidget {
@@ -27,58 +29,76 @@ class _AiCapturePageState
   final ImagePicker _imagePicker =
   ImagePicker();
 
+  final TfliteWasteDetector
+  _tfliteDetector =
+  TfliteWasteDetector();
+
   XFile? _selectedImage;
+
   Uint8List? _selectedImageBytes;
 
-  ImageUploadResult? _uploadResult;
+  _FinalAiResult? _finalResult;
 
-  List<WasteSearchItem>
-  _mockWasteItems = [];
+  /*
+   * AI가 최종 결과를 확정하지 못했더라도
+   * 모바일 AI 결과가 서버에 저장된 경우
+   * 사용자의 직접 선택을 정정 데이터로
+   * 남길 수 있도록 ImageLog 정보를 보존합니다.
+   */
+  int? _latestImageLogId;
 
-  int? _selectedMockWasteItemId;
-
-  MockAnalysisScenario _mockScenario =
-      MockAnalysisScenario.lowConfidence;
-
-  MockAnalysisResult? _mockResult;
-
-  ServerReanalysisResult?
-  _serverResult;
+  bool _hasRecordedAiResult = false;
 
   bool _isPicking = false;
-  bool _isUploading = false;
 
-  bool _isLoadingMockItems = false;
-  bool _isMockAnalyzing = false;
+  bool _isAnalyzing = false;
 
-  bool _isServerAnalyzing = false;
+  bool _isCorrecting = false;
 
-  String? _mockItemsError;
+  bool _usedServerReanalysis =
+  false;
 
-  Future<void> _pickFromGallery() async {
-    await _pickImage(
-      source: ImageSource.gallery,
-    );
+  String? _progressMessage;
+
+  String? _analysisError;
+
+  bool get _isBusy =>
+      _isPicking ||
+          _isAnalyzing ||
+          _isCorrecting;
+
+  @override
+  void dispose() {
+    _tfliteDetector.close();
+
+    super.dispose();
   }
 
   Future<void> _takePhoto() async {
     if (kIsWeb) {
       _showMessage(
-        '현재 Chrome 테스트에서는 사진 선택을 사용해주세요. '
-            '실제 Android 기기에서는 카메라 촬영을 사용할 수 있어요.',
+        '실제 AI 촬영 분석은 '
+            'Android 기기에서 이용해주세요.',
       );
 
       return;
     }
 
     await _pickImage(
-      source: ImageSource.camera,
+      ImageSource.camera,
     );
   }
 
-  Future<void> _pickImage({
-    required ImageSource source,
-  }) async {
+  Future<void>
+  _pickFromGallery() async {
+    await _pickImage(
+      ImageSource.gallery,
+    );
+  }
+
+  Future<void> _pickImage(
+      ImageSource source,
+      ) async {
     if (_isBusy) {
       return;
     }
@@ -108,22 +128,11 @@ class _AiCapturePageState
 
       setState(() {
         _selectedImage = image;
-        _selectedImageBytes = bytes;
 
-        _uploadResult = null;
+        _selectedImageBytes =
+            bytes;
 
-        _mockResult = null;
-        _serverResult = null;
-
-        _mockWasteItems = [];
-        _selectedMockWasteItemId =
-        null;
-
-        _mockItemsError = null;
-
-        _mockScenario =
-            MockAnalysisScenario
-                .lowConfidence;
+        _resetAnalysis();
       });
     } catch (_) {
       if (!mounted) {
@@ -142,11 +151,20 @@ class _AiCapturePageState
     }
   }
 
-  bool get _isBusy {
-    return _isPicking ||
-        _isUploading ||
-        _isMockAnalyzing ||
-        _isServerAnalyzing;
+  void _resetAnalysis() {
+    _finalResult = null;
+
+    _latestImageLogId = null;
+
+    _hasRecordedAiResult =
+    false;
+
+    _usedServerReanalysis =
+    false;
+
+    _progressMessage = null;
+
+    _analysisError = null;
   }
 
   void _clearImage() {
@@ -156,26 +174,48 @@ class _AiCapturePageState
 
     setState(() {
       _selectedImage = null;
+
       _selectedImageBytes = null;
 
-      _uploadResult = null;
-
-      _mockResult = null;
-      _serverResult = null;
-
-      _mockWasteItems = [];
-      _selectedMockWasteItemId =
-      null;
-
-      _mockItemsError = null;
-
-      _mockScenario =
-          MockAnalysisScenario
-              .lowConfidence;
+      _resetAnalysis();
     });
   }
 
-  Future<void> _uploadImage() async {
+  /// AI 분석 자체가 완료되지 못해
+  /// 정정 데이터를 저장할 수 없는 경우에는
+  /// 일반 품목 검색 화면으로 이동합니다.
+  ///
+  /// 반대로 모바일 AI 결과가 이미 ImageLog에
+  /// 저장된 경우에는 사용자의 직접 선택도
+  /// 정정 데이터로 기록합니다.
+  Future<void>
+  _openSearchFromFailure() async {
+    final int? imageLogId =
+        _latestImageLogId;
+
+    if (_hasRecordedAiResult &&
+        imageLogId != null &&
+        imageLogId > 0) {
+      await _selectAndSaveCorrection(
+        imageLogId:
+        imageLogId,
+      );
+
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushNamed(
+      context,
+      AppRoutes.wasteSearch,
+    );
+  }
+
+  Future<void>
+  _analyzeSelectedImage() async {
     final XFile? image =
         _selectedImage;
 
@@ -185,15 +225,17 @@ class _AiCapturePageState
     if (image == null ||
         bytes == null) {
       _showMessage(
-        '먼저 분석할 사진을 선택해주세요.',
+        '먼저 분석할 사진을 '
+            '촬영하거나 선택해주세요.',
       );
 
       return;
     }
 
-    if (_uploadResult != null) {
+    if (kIsWeb) {
       _showMessage(
-        '이미 서버에 업로드된 이미지예요.',
+        '현재 기기 내 AI 분석은 '
+            'Android에서 사용할 수 있어요.',
       );
 
       return;
@@ -204,342 +246,452 @@ class _AiCapturePageState
     }
 
     setState(() {
-      _isUploading = true;
+      _isAnalyzing = true;
+
+      _finalResult = null;
+
+      _latestImageLogId = null;
+
+      _hasRecordedAiResult =
+      false;
+
+      _analysisError = null;
+
+      _usedServerReanalysis =
+      false;
+
+      _progressMessage =
+      '휴대폰에서 사진을 분석하고 있어요.';
     });
 
     try {
-      final ImageUploadResult result =
+      /*
+       * 1. TFLite 기기 내 1차 분석
+       */
+      final TfliteWasteDetectionResult
+      tfliteResult =
+      await _tfliteDetector
+          .analyze(
+        imageBytes: bytes,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _progressMessage =
+        '분석 결과를 안전하게 저장하고 있어요.';
+      });
+
+      /*
+       * 2. 원본 이미지 Spring Boot 업로드
+       */
+      final ImageUploadResult
+      uploadResult =
       await ImageUploadApi.upload(
         bytes: bytes,
         fileName: image.name,
       );
 
-      if (!mounted) {
-        return;
-      }
+      /*
+       * ImageLog ID는 사용자 정정 기능에서도
+       * 필요하므로 별도로 기억합니다.
+       */
+      _latestImageLogId =
+          uploadResult.imageLogId;
 
-      setState(() {
-        _uploadResult = result;
-      });
-
-      _showMessage(
-        '이미지를 서버에 업로드했어요.',
-      );
-
-      if (kDebugMode) {
-        await _loadMockWasteItems();
-      }
-    } on ImageUploadApiException catch (
-    exception
-    ) {
-      if (!mounted) {
-        return;
-      }
-
-      if (exception.unauthorized) {
-        await _moveToLogin();
-        return;
-      }
-
-      _showMessage(
-        exception.message,
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage(
-        '이미지를 업로드하는 중 '
-            '오류가 발생했습니다.',
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
-  Future<void>
-  _loadMockWasteItems() async {
-    if (_isLoadingMockItems) {
-      return;
-    }
-
-    setState(() {
-      _isLoadingMockItems = true;
-      _mockItemsError = null;
-    });
-
-    try {
-      final WasteSearchResult result =
-      await WasteSearchApi
-          .searchItems(
-        keyword: '',
-        page: 0,
-        size: 100,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _mockWasteItems =
-            result.items;
-
-        if (_mockWasteItems.isNotEmpty) {
-          _selectedMockWasteItemId =
-              _findDefaultMockItemId(
-                _mockWasteItems,
-              );
-        }
-      });
-    } on WasteSearchApiException catch (
-    exception
-    ) {
-      if (!mounted) {
-        return;
-      }
-
-      if (exception.unauthorized) {
-        await _moveToLogin();
-        return;
-      }
-
-      setState(() {
-        _mockItemsError =
-            exception.message;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _mockItemsError =
-        '품목 목록을 불러오지 못했습니다.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingMockItems = false;
-        });
-      }
-    }
-  }
-
-  int _findDefaultMockItemId(
-      List<WasteSearchItem> items,
-      ) {
-    for (
-    final WasteSearchItem item
-    in items
-    ) {
-      if (item.name == '플라스틱 용기') {
-        return item.id;
-      }
-    }
-
-    return items.first.id;
-  }
-
-  Future<void>
-  _runMockAnalysis() async {
-    final ImageUploadResult? upload =
-        _uploadResult;
-
-    if (upload == null) {
-      _showMessage(
-        '먼저 이미지를 업로드해주세요.',
-      );
-
-      return;
-    }
-
-    if (_mockResult != null) {
-      _showMessage(
-        '현재 이미지는 이미 1차 분석됐어요.',
-      );
-
-      return;
-    }
-
-    if (_mockScenario
-        .requiresWasteItem &&
-        _selectedMockWasteItemId ==
-            null) {
-      _showMessage(
-        '테스트할 품목을 선택해주세요.',
-      );
-
-      return;
-    }
-
-    if (_isBusy) {
-      return;
-    }
-
-    setState(() {
-      _isMockAnalyzing = true;
-    });
-
-    try {
-      final MockAnalysisResult result =
-      await AiMockAnalysisApi
-          .analyze(
+      /*
+       * 3. TFLite 결과 저장
+       */
+      final MobileAnalysisResult
+      mobileResult =
+      await MobileAnalysisApi.record(
         imageLogId:
-        upload.imageLogId,
-        scenario:
-        _mockScenario,
-        wasteItemId:
-        _selectedMockWasteItemId,
+        uploadResult.imageLogId,
+        modelLabel:
+        tfliteResult.modelLabel,
+        confidence:
+        tfliteResult.confidence,
+        modelVersion:
+        tfliteResult.modelVersion,
       );
 
-      if (!mounted) {
-        return;
-      }
+      /*
+       * 여기까지 왔다면 최소한 모바일 AI 결과가
+       * ImageLog에 존재하므로 사용자 정정 API를
+       * 사용할 수 있습니다.
+       */
+      _hasRecordedAiResult =
+      true;
 
-      setState(() {
-        _mockResult = result;
-      });
-
-      if (result
+      /*
+       * 4. 모바일 AI 신뢰도가 충분한 경우
+       */
+      if (!mobileResult
           .needsServerReanalysis) {
-        _showMessage(
-          '낮은 신뢰도로 판정됐어요. '
-              '이제 실제 Python YOLO로 재분석할 수 있어요.',
-        );
-      } else if (
-      result.analysisStatus ==
-          'ANALYSIS_FAILED'
-      ) {
-        _showMessage(
-          '분석 실패 시나리오가 적용됐어요.',
-        );
-      } else {
-        _showMessage(
-          '높은 신뢰도 분석이 완료됐어요.',
-        );
-      }
-    } on AiMockAnalysisApiException catch (
-    exception
-    ) {
-      if (!mounted) {
-        return;
-      }
+        final int? wasteItemId =
+            mobileResult.wasteItemId;
 
-      if (exception.unauthorized) {
-        await _moveToLogin();
-        return;
-      }
+        final String?
+        wasteItemName =
+            mobileResult
+                .wasteItemName;
 
-      _showMessage(
-        exception.message,
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
+        if (wasteItemId == null ||
+            wasteItemId <= 0 ||
+            wasteItemName == null ||
+            wasteItemName.isEmpty) {
+          throw const _AiFlowException(
+            'AI 분석 결과를 품목 정보와 '
+                '연결하지 못했어요.',
+          );
+        }
 
-      _showMessage(
-        'AI 분석 중 오류가 발생했습니다.',
-      );
-    } finally {
-      if (mounted) {
+        if (!mounted) {
+          return;
+        }
+
         setState(() {
-          _isMockAnalyzing = false;
+          _finalResult =
+              _FinalAiResult(
+                imageLogId:
+                uploadResult.imageLogId,
+                wasteItemId:
+                wasteItemId,
+                wasteItemName:
+                wasteItemName,
+                confidence:
+                mobileResult.confidence,
+                modelVersion:
+                mobileResult
+                    .modelVersion ??
+                    tfliteResult
+                        .modelVersion,
+                userCorrected:
+                false,
+              );
+
+          _progressMessage = null;
         });
-      }
-    }
-  }
 
-  Future<void>
-  _runServerReanalysis() async {
-    final ImageUploadResult? upload =
-        _uploadResult;
-
-    final MockAnalysisResult? mock =
-        _mockResult;
-
-    if (upload == null ||
-        mock == null) {
-      _showMessage(
-        '먼저 낮은 신뢰도 1차 분석을 실행해주세요.',
-      );
-
-      return;
-    }
-
-    if (!mock.needsServerReanalysis) {
-      _showMessage(
-        '현재 결과는 서버 재분석 대상이 아닙니다.',
-      );
-
-      return;
-    }
-
-    if (_serverResult != null) {
-      _showMessage(
-        '이미 서버 AI 재분석을 완료했습니다.',
-      );
-
-      return;
-    }
-
-    if (_isBusy) {
-      return;
-    }
-
-    setState(() {
-      _isServerAnalyzing = true;
-    });
-
-    try {
-      final ServerReanalysisResult result =
-      await ServerReanalysisApi
-          .analyze(
-        imageLogId:
-        upload.imageLogId,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _serverResult = result;
-      });
-
-      if (result.detected) {
-        _showMessage(
-          'Python YOLO 재분석이 완료됐어요.',
-        );
-      } else {
-        _showMessage(
-          'YOLO가 사진에서 지원 품목을 '
-              '찾지 못했어요.',
-        );
-      }
-    } on ServerReanalysisApiException catch (
-    exception
-    ) {
-      if (!mounted) {
-        return;
-      }
-
-      if (exception.unauthorized) {
-        await _moveToLogin();
         return;
       }
 
       /*
-       * AI 서버 연결 실패/Timeout 등의 경우
-       * 백엔드는 SERVER_REANALYSIS_PENDING을
-       * 유지하므로 사용자가 다시 시도할 수 있습니다.
+       * 5. 모바일 신뢰도가 낮으면
+       *    서버 YOLO를 자동 호출
        */
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _usedServerReanalysis =
+        true;
+
+        _progressMessage =
+        '조금 더 정확하게 확인하고 있어요.';
+      });
+
+      final ServerReanalysisResult
+      serverResult =
+      await ServerReanalysisApi
+          .analyze(
+        imageLogId:
+        uploadResult.imageLogId,
+      );
+
+      /*
+       * 서버에서도 충분히 확실한 품목을
+       * 찾지 못했다면 억지로 AI 결과를
+       * 보여주지 않습니다.
+       *
+       * 이 경우에도 모바일 AI 결과는
+       * ImageLog에 남아 있으므로 사용자가
+       * 직접 선택하면 정정 자료로 저장됩니다.
+       */
+      if (!serverResult.detected) {
+        throw const _AiFlowException(
+          '현재 AI가 지원하지 않는 품목이거나 '
+              '사진만으로 구분하기 어려운 '
+              '물건일 수 있어요.',
+        );
+      }
+
+      final int? wasteItemId =
+          serverResult.wasteItemId;
+
+      final String? wasteItemName =
+          serverResult
+              .wasteItemName;
+
+      if (wasteItemId == null ||
+          wasteItemId <= 0 ||
+          wasteItemName == null ||
+          wasteItemName.isEmpty) {
+        throw const _AiFlowException(
+          'AI 분석 결과를 품목 정보와 '
+              '연결하지 못했어요.',
+        );
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _finalResult =
+            _FinalAiResult(
+              imageLogId:
+              uploadResult.imageLogId,
+              wasteItemId:
+              wasteItemId,
+              wasteItemName:
+              wasteItemName,
+              confidence:
+              serverResult.confidence,
+              modelVersion:
+              serverResult
+                  .modelVersion,
+              userCorrected:
+              false,
+            );
+
+        _progressMessage = null;
+      });
+    } on TfliteWasteDetectorException catch (
+    exception
+    ) {
+      _setAnalysisError(
+        exception.message,
+      );
+    } on ImageUploadApiException catch (
+    exception
+    ) {
+      if (exception.unauthorized) {
+        await _moveToLogin();
+
+        return;
+      }
+
+      _setAnalysisError(
+        exception.message,
+      );
+    } on MobileAnalysisApiException catch (
+    exception
+    ) {
+      if (exception.unauthorized) {
+        await _moveToLogin();
+
+        return;
+      }
+
+      _setAnalysisError(
+        exception.message,
+      );
+    } on ServerReanalysisApiException catch (
+    exception
+    ) {
+      if (exception.unauthorized) {
+        await _moveToLogin();
+
+        return;
+      }
+
+      _setAnalysisError(
+        exception.message,
+      );
+    } on _AiFlowException catch (
+    exception
+    ) {
+      _setAnalysisError(
+        exception.message,
+      );
+    } catch (_) {
+      _setAnalysisError(
+        'AI 분석 중 문제가 발생했어요. '
+            '잠시 후 다시 시도해주세요.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
+
+          _progressMessage = null;
+        });
+      }
+    }
+  }
+
+  void _setAnalysisError(
+      String message,
+      ) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _finalResult = null;
+
+      _analysisError =
+          message;
+
+      _progressMessage = null;
+    });
+  }
+
+  /// AI 결과가 실제 물건과 맞다고
+  /// 사용자가 확인한 경우입니다.
+  void _acceptCurrentResult() {
+    final _FinalAiResult?
+    result =
+        _finalResult;
+
+    if (result == null) {
+      return;
+    }
+
+    _openDisposalCheck(
+      result,
+    );
+  }
+
+  /// AI 결과가 틀린 경우
+  /// 기존 품목 검색 화면을 선택 모드로 열고
+  /// 사용자의 선택을 ImageLog에 저장합니다.
+  Future<void>
+  _correctCurrentResult() async {
+    final _FinalAiResult?
+    result =
+        _finalResult;
+
+    if (result == null) {
+      return;
+    }
+
+    await _selectAndSaveCorrection(
+      imageLogId:
+      result.imageLogId,
+      currentWasteItemId:
+      result.wasteItemId,
+    );
+  }
+
+  /// AI 정정용 품목 검색
+  ///
+  /// 기존 WasteSearchPage를 그대로 재사용하되
+  /// selectionMode=true로 열어 선택된
+  /// WasteSearchItem을 이전 화면으로 반환합니다.
+  Future<void>
+  _selectAndSaveCorrection({
+    required int imageLogId,
+    int? currentWasteItemId,
+  }) async {
+    if (_isBusy) {
+      return;
+    }
+
+    final WasteSearchItem? selected =
+    await Navigator.push<
+        WasteSearchItem>(
+      context,
+      MaterialPageRoute<
+          WasteSearchItem>(
+        builder: (_) =>
+        const WasteSearchPage(
+          selectionMode: true,
+        ),
+      ),
+    );
+
+    if (!mounted ||
+        selected == null) {
+      return;
+    }
+
+    /*
+     * AI가 제시한 품목과 동일한 품목을
+     * 다시 선택했다면 정정 요청을 만들
+     * 필요가 없습니다.
+     */
+    if (currentWasteItemId !=
+        null &&
+        selected.id ==
+            currentWasteItemId) {
+      _showMessage(
+        'AI 추정과 같은 품목을 선택했어요.',
+      );
+
+      return;
+    }
+
+    setState(() {
+      _isCorrecting = true;
+    });
+
+    try {
+      final ImageCorrectionResult
+      correction =
+      await ImageCorrectionApi
+          .correct(
+        imageLogId:
+        imageLogId,
+        wasteItemId:
+        selected.id,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      /*
+       * 사용자 정정이 완료된 뒤에는
+       * AI confidence/modelVersion을
+       * 수정 품목의 속성처럼 사용하면 안 됩니다.
+       *
+       * 따라서 사용자 선택 결과에는
+       * confidence/modelVersion을 null로 둡니다.
+       */
+      setState(() {
+        _finalResult =
+            _FinalAiResult(
+              imageLogId:
+              correction.imageLogId,
+              wasteItemId:
+              correction
+                  .correctedWasteItemId,
+              wasteItemName:
+              correction
+                  .correctedWasteItemName,
+              confidence:
+              null,
+              modelVersion:
+              null,
+              userCorrected:
+              true,
+            );
+
+        _analysisError = null;
+      });
+
+      _showMessage(
+        '${correction.correctedWasteItemName}(으)로 '
+            '수정했어요.',
+      );
+    } on ImageCorrectionApiException catch (
+    exception
+    ) {
+      if (!mounted) {
+        return;
+      }
+
+      if (exception.unauthorized) {
+        await _moveToLogin();
+
+        return;
+      }
+
       _showMessage(
         exception.message,
       );
@@ -549,15 +701,37 @@ class _AiCapturePageState
       }
 
       _showMessage(
-        '서버 AI 재분석 중 오류가 발생했습니다.',
+        '선택한 품목을 저장하지 못했어요.',
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isServerAnalyzing = false;
+          _isCorrecting = false;
         });
       }
     }
+  }
+
+  void _openDisposalCheck(
+      _FinalAiResult result,
+      ) {
+    Navigator.pushNamed(
+      context,
+      AppRoutes.aiDisposalCheck,
+      arguments:
+      <String, dynamic>{
+        'wasteItemId':
+        result.wasteItemId,
+        'wasteItemName':
+        result.wasteItemName,
+        'confidence':
+        result.confidence,
+        'modelVersion':
+        result.modelVersion,
+        'userCorrected':
+        result.userCorrected,
+      },
+    );
   }
 
   Future<void> _moveToLogin() async {
@@ -571,37 +745,6 @@ class _AiCapturePageState
       context,
       AppRoutes.login,
           (route) => false,
-    );
-  }
-
-  void _openDisposalCheck() {
-    final ServerReanalysisResult?
-    result =
-        _serverResult;
-
-    if (result == null ||
-        result.wasteItemId == null ||
-        result.wasteItemName == null) {
-      _showMessage(
-        '연결된 분리배출 품목이 없습니다.',
-      );
-
-      return;
-    }
-
-    Navigator.pushNamed(
-      context,
-      AppRoutes.aiDisposalCheck,
-      arguments: <String, dynamic>{
-        'wasteItemId':
-        result.wasteItemId,
-        'wasteItemName':
-        result.wasteItemName,
-        'confidence':
-        result.confidence,
-        'modelVersion':
-        result.modelVersion,
-      },
     );
   }
 
@@ -635,10 +778,7 @@ class _AiCapturePageState
       return '${megabytes.toStringAsFixed(1)} MB';
     }
 
-    final double kilobytes =
-        bytes.lengthInBytes / 1024;
-
-    return '${kilobytes.toStringAsFixed(0)} KB';
+    return '${(bytes.lengthInBytes / 1024).toStringAsFixed(0)} KB';
   }
 
   @override
@@ -663,7 +803,7 @@ class _AiCapturePageState
             20,
             12,
             20,
-            36,
+            40,
           ),
           children: [
             Text(
@@ -679,9 +819,9 @@ class _AiCapturePageState
             ),
 
             Text(
-              '사진 속 폐기물을 AI로 확인한 뒤 '
-                  '분리배출 방법과 내 거주지 일정을 '
-                  '함께 안내해요.',
+              'AI가 사진 속 물건을 먼저 추정하고, '
+                  '필요한 경우 더 정확한 분석을 '
+                  '자동으로 진행해요.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -697,7 +837,8 @@ class _AiCapturePageState
             _ImagePreviewCard(
               imageBytes:
               _selectedImageBytes,
-              isPicking: _isPicking,
+              isPicking:
+              _isPicking,
             ),
 
             if (hasImage) ...[
@@ -709,42 +850,39 @@ class _AiCapturePageState
                 children: [
                   Expanded(
                     child: Text(
-                      _selectedImage!.name,
+                      _selectedImage!
+                          .name,
                       overflow:
-                      TextOverflow.ellipsis,
+                      TextOverflow
+                          .ellipsis,
+                      style:
+                      const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme
+                            .textSecondaryColor,
+                      ),
                     ),
                   ),
 
                   const SizedBox(
-                    width: 12,
+                    width: 10,
                   ),
 
                   Text(
                     _fileSizeText(),
                     style:
                     const TextStyle(
+                      fontSize: 12,
                       color: AppTheme
                           .textSecondaryColor,
-                      fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ],
 
-            if (_uploadResult != null) ...[
-              const SizedBox(
-                height: 14,
-              ),
-
-              _UploadCompletedCard(
-                result:
-                _uploadResult!,
-              ),
-            ],
-
             const SizedBox(
-              height: 22,
+              height: 20,
             ),
 
             Row(
@@ -752,17 +890,16 @@ class _AiCapturePageState
                 Expanded(
                   child:
                   OutlinedButton.icon(
-                    onPressed: _isBusy
+                    onPressed:
+                    _isBusy
                         ? null
                         : _takePhoto,
                     icon: const Icon(
                       Icons
                           .camera_alt_outlined,
                     ),
-                    label: Text(
-                      kIsWeb
-                          ? '카메라'
-                          : '촬영하기',
+                    label: const Text(
+                      '촬영하기',
                     ),
                   ),
                 ),
@@ -774,7 +911,8 @@ class _AiCapturePageState
                 Expanded(
                   child:
                   ElevatedButton.icon(
-                    onPressed: _isBusy
+                    onPressed:
+                    _isBusy
                         ? null
                         : _pickFromGallery,
                     icon: const Icon(
@@ -789,13 +927,15 @@ class _AiCapturePageState
               ],
             ),
 
-            if (hasImage) ...[
+            if (hasImage &&
+                !_isAnalyzing) ...[
               const SizedBox(
-                height: 12,
+                height: 8,
               ),
 
               TextButton.icon(
-                onPressed: _isBusy
+                onPressed:
+                _isBusy
                     ? null
                     : _clearImage,
                 icon: const Icon(
@@ -807,321 +947,109 @@ class _AiCapturePageState
               ),
             ],
 
-            const SizedBox(
-              height: 20,
-            ),
-
-            SizedBox(
-              height: 52,
-              child:
-              ElevatedButton.icon(
-                onPressed:
-                hasImage &&
-                    !_isBusy &&
-                    _uploadResult ==
-                        null
-                    ? _uploadImage
-                    : null,
-                icon: _isUploading
-                    ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child:
-                  CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
-                )
-                    : const Icon(
-                  Icons
-                      .cloud_upload_outlined,
-                ),
-                label: Text(
-                  _isUploading
-                      ? '이미지 업로드 중...'
-                      : _uploadResult != null
-                      ? '이미지 업로드 완료'
-                      : '이미지 업로드하기',
-                ),
-              ),
-            ),
-
-            if (kDebugMode &&
-                _uploadResult != null) ...[
-              const SizedBox(
-                height: 22,
-              ),
-
-              _buildMockSection(),
-            ],
-
-            if (_serverResult != null) ...[
-              const SizedBox(
-                height: 22,
-              ),
-
-              _ServerResultCard(
-                result:
-                _serverResult!,
-                onOpenDetail:
-                _serverResult!
-                    .wasteItemId !=
-                    null
-                    ? _openDisposalCheck
-                    : null,
-              ),
-            ],
-
-            const SizedBox(
-              height: 22,
-            ),
-
-            const _AnalysisFlowCard(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMockSection() {
-    return Container(
-      padding:
-      const EdgeInsets.all(
-        18,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(
-          0xFFFFF8E8,
-        ),
-        borderRadius:
-        BorderRadius.circular(
-          18,
-        ),
-        border: Border.all(
-          color: const Color(
-            0xFFF0DFC0,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons
-                    .developer_mode_rounded,
-              ),
-
-              const SizedBox(
-                width: 9,
-              ),
-
-              Expanded(
-                child: Text(
-                  'Chrome 개발 테스트',
-                  style:
-                  Theme.of(context)
-                      .textTheme
-                      .titleMedium,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          const Text(
-            '실제 모바일 TFLite 대신 '
-                'Mock 결과를 먼저 만들어 '
-                '저신뢰도 서버 재분석 흐름을 테스트합니다.',
-          ),
-
-          const SizedBox(
-            height: 18,
-          ),
-
-          if (_isLoadingMockItems)
-            const Center(
-              child:
-              CircularProgressIndicator(),
-            )
-          else if (_mockItemsError !=
-              null) ...[
-            Text(
-              _mockItemsError!,
-            ),
-
-            const SizedBox(
-              height: 10,
-            ),
-
-            OutlinedButton(
-              onPressed:
-              _loadMockWasteItems,
-              child: const Text(
-                '품목 다시 불러오기',
-              ),
-            ),
-          ] else ...[
-            DropdownButtonFormField<int>(
-              value:
-              _selectedMockWasteItemId,
-              decoration:
-              const InputDecoration(
-                labelText:
-                '1차 분석 가정 품목',
-              ),
-              items: _mockWasteItems
-                  .map(
-                    (item) =>
-                    DropdownMenuItem<int>(
-                      value: item.id,
-                      child: Text(
-                        item.name,
-                      ),
-                    ),
-              )
-                  .toList(),
-              onChanged:
-              _mockResult != null
-                  ? null
-                  : (value) {
-                setState(() {
-                  _selectedMockWasteItemId =
-                      value;
-                });
-              },
-            ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            DropdownButtonFormField<
-                MockAnalysisScenario>(
-              value: _mockScenario,
-              decoration:
-              const InputDecoration(
-                labelText:
-                '1차 분석 시나리오',
-              ),
-              items:
-              MockAnalysisScenario
-                  .values
-                  .map(
-                    (scenario) {
-                  return DropdownMenuItem<
-                      MockAnalysisScenario>(
-                    value: scenario,
-                    child: Text(
-                      scenario.label,
-                    ),
-                  );
-                },
-              ).toList(),
-              onChanged:
-              _mockResult != null
-                  ? null
-                  : (value) {
-                if (value ==
-                    null) {
-                  return;
-                }
-
-                setState(() {
-                  _mockScenario =
-                      value;
-                });
-              },
-            ),
-
-            const SizedBox(
-              height: 16,
-            ),
-
-            SizedBox(
-              width: double.infinity,
-              child:
-              ElevatedButton.icon(
-                onPressed:
-                _isBusy ||
-                    _mockResult !=
-                        null
-                    ? null
-                    : _runMockAnalysis,
-                icon: _isMockAnalyzing
-                    ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child:
-                  CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
-                )
-                    : const Icon(
-                  Icons
-                      .science_outlined,
-                ),
-                label: Text(
-                  _isMockAnalyzing
-                      ? '1차 분석 중...'
-                      : '개발용 1차 분석 실행',
-                ),
-              ),
-            ),
-          ],
-
-          if (_mockResult != null) ...[
-            const SizedBox(
-              height: 16,
-            ),
-
-            _MockResultCard(
-              result:
-              _mockResult!,
-            ),
-
-            if (_mockResult!
-                .needsServerReanalysis &&
-                _serverResult == null) ...[
+            if (hasImage &&
+                _finalResult == null) ...[
               const SizedBox(
                 height: 16,
               ),
 
               SizedBox(
-                width: double.infinity,
+                height: 54,
                 child:
                 ElevatedButton.icon(
                   onPressed:
                   _isBusy
                       ? null
-                      : _runServerReanalysis,
-                  icon: _isServerAnalyzing
+                      : _analyzeSelectedImage,
+                  icon:
+                  _isAnalyzing
                       ? const SizedBox(
-                    width: 18,
-                    height: 18,
+                    width: 20,
+                    height: 20,
                     child:
                     CircularProgressIndicator(
-                      strokeWidth: 2,
+                      strokeWidth:
+                      2,
                     ),
                   )
                       : const Icon(
                     Icons
-                        .hub_outlined,
+                        .auto_awesome_rounded,
                   ),
                   label: Text(
-                    _isServerAnalyzing
-                        ? 'Python YOLO 분석 중...'
-                        : '실제 서버 AI로 재분석',
+                    _isAnalyzing
+                        ? 'AI 분석 중...'
+                        : _analysisError != null
+                        ? '같은 사진 다시 분석하기'
+                        : 'AI로 분석하기',
                   ),
                 ),
               ),
             ],
+
+            if (_isAnalyzing) ...[
+              const SizedBox(
+                height: 14,
+              ),
+
+              _AnalysisProgressCard(
+                message:
+                _progressMessage ??
+                    'AI가 사진을 분석하고 있어요.',
+              ),
+            ],
+
+            if (_analysisError != null &&
+                !_isAnalyzing) ...[
+              const SizedBox(
+                height: 14,
+              ),
+
+              _AnalysisErrorCard(
+                message:
+                _analysisError!,
+                isCorrecting:
+                _isCorrecting,
+                onSearch:
+                _openSearchFromFailure,
+                onRetake:
+                _takePhoto,
+              ),
+            ],
+
+            if (_finalResult != null) ...[
+              const SizedBox(
+                height: 20,
+              ),
+
+              AiAnalysisResultCard(
+                wasteItemName:
+                _finalResult!
+                    .wasteItemName,
+                confidence:
+                _finalResult!
+                    .confidence,
+                usedServerReanalysis:
+                _usedServerReanalysis,
+                userCorrected:
+                _finalResult!
+                    .userCorrected,
+                isCorrecting:
+                _isCorrecting,
+                onAccept:
+                _acceptCurrentResult,
+                onCorrect:
+                _correctCurrentResult,
+              ),
+            ],
+
+            const SizedBox(
+              height: 26,
+            ),
+
+            const _SimpleFlowGuide(),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1135,6 +1063,7 @@ class _ImagePreviewCard
   });
 
   final Uint8List? imageBytes;
+
   final bool isPicking;
 
   @override
@@ -1177,12 +1106,9 @@ class _ImagePreviewCard
       );
     }
 
-    final Uint8List? bytes =
-        imageBytes;
-
-    if (bytes != null) {
+    if (imageBytes != null) {
       return Image.memory(
-        bytes,
+        imageBytes!,
         fit: BoxFit.cover,
       );
     }
@@ -1206,14 +1132,15 @@ class _ImagePreviewCard
                   .withValues(
                 alpha: 0.1,
               ),
-              shape: BoxShape.circle,
+              shape:
+              BoxShape.circle,
             ),
             child: const Icon(
               Icons
                   .photo_camera_outlined,
               size: 38,
-              color:
-              AppTheme.primaryColor,
+              color: AppTheme
+                  .primaryColor,
             ),
           ),
 
@@ -1223,8 +1150,7 @@ class _ImagePreviewCard
 
           Text(
             '분석할 사진이 아직 없어요',
-            style:
-            Theme.of(context)
+            style: Theme.of(context)
                 .textTheme
                 .titleMedium,
           ),
@@ -1233,9 +1159,9 @@ class _ImagePreviewCard
             height: 7,
           ),
 
-          Text(
+          const Text(
             '폐기물이 화면에 잘 보이도록 '
-                '가까이에서 촬영해주세요.',
+                '촬영해주세요.',
             textAlign:
             TextAlign.center,
           ),
@@ -1245,13 +1171,13 @@ class _ImagePreviewCard
   }
 }
 
-class _UploadCompletedCard
+class _AnalysisProgressCard
     extends StatelessWidget {
-  const _UploadCompletedCard({
-    required this.result,
+  const _AnalysisProgressCard({
+    required this.message,
   });
 
-  final ImageUploadResult result;
+  final String message;
 
   @override
   Widget build(
@@ -1260,55 +1186,57 @@ class _UploadCompletedCard
     return Container(
       padding:
       const EdgeInsets.all(
-        16,
+        18,
       ),
       decoration: BoxDecoration(
         color: AppTheme.primaryColor
             .withValues(
-          alpha: 0.08,
+          alpha: 0.07,
         ),
         borderRadius:
         BorderRadius.circular(
-          16,
+          18,
         ),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.cloud_done_rounded,
-            color:
-            AppTheme.primaryColor,
+          const SizedBox(
+            width: 23,
+            height: 23,
+            child:
+            CircularProgressIndicator(
+              strokeWidth: 2.5,
+            ),
           ),
 
           const SizedBox(
-            width: 12,
+            width: 14,
           ),
 
           Expanded(
             child: Column(
               crossAxisAlignment:
-              CrossAxisAlignment.start,
+              CrossAxisAlignment
+                  .start,
               children: [
                 const Text(
-                  '이미지 업로드 완료',
+                  'AI가 확인하고 있어요',
                   style: TextStyle(
-                    color:
-                    AppTheme.primaryColor,
                     fontWeight:
-                    FontWeight.w700,
+                    FontWeight.w800,
                   ),
                 ),
 
                 const SizedBox(
-                  height: 3,
+                  height: 4,
                 ),
 
                 Text(
-                  'ImageLog #'
-                      '${result.imageLogId} · '
-                      '${result.analysisStatus}',
+                  message,
                   style:
                   const TextStyle(
+                    color: AppTheme
+                        .textSecondaryColor,
                     fontSize: 12,
                   ),
                 ),
@@ -1321,120 +1249,43 @@ class _UploadCompletedCard
   }
 }
 
-class _MockResultCard
+class _AnalysisErrorCard
     extends StatelessWidget {
-  const _MockResultCard({
-    required this.result,
+  const _AnalysisErrorCard({
+    required this.message,
+    required this.isCorrecting,
+    required this.onSearch,
+    required this.onRetake,
   });
 
-  final MockAnalysisResult result;
+  final String message;
+
+  final bool isCorrecting;
+
+  final VoidCallback onSearch;
+
+  final VoidCallback onRetake;
 
   @override
   Widget build(
       BuildContext context,
       ) {
-    final double? confidence =
-        result.confidence;
-
-    return Container(
-      width: double.infinity,
-      padding:
-      const EdgeInsets.all(
-        14,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-        BorderRadius.circular(
-          14,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '1차 분석 결과',
-            style: TextStyle(
-              fontWeight:
-              FontWeight.w700,
-            ),
-          ),
-
-          const SizedBox(
-            height: 10,
-          ),
-
-          _ResultRow(
-            label: '상태',
-            value:
-            result.analysisStatus,
-          ),
-
-          if (result.wasteItemName !=
-              null)
-            _ResultRow(
-              label: '가정 품목',
-              value:
-              result.wasteItemName!,
-            ),
-
-          if (confidence != null)
-            _ResultRow(
-              label: '신뢰도',
-              value:
-              '${(confidence * 100).toStringAsFixed(0)}%',
-            ),
-
-          _ResultRow(
-            label: '서버 재분석',
-            value: result
-                .needsServerReanalysis
-                ? '필요'
-                : '불필요',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ServerResultCard
-    extends StatelessWidget {
-  const _ServerResultCard({
-    required this.result,
-    required this.onOpenDetail,
-  });
-
-  final ServerReanalysisResult result;
-
-  final VoidCallback? onOpenDetail;
-
-  @override
-  Widget build(
-      BuildContext context,
-      ) {
-    final double? confidence =
-        result.confidence;
-
     return Container(
       padding:
       const EdgeInsets.all(
         18,
       ),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor
-            .withValues(
-          alpha: 0.08,
+        color: const Color(
+          0xFFFFF9EF,
         ),
         borderRadius:
         BorderRadius.circular(
           20,
         ),
         border: Border.all(
-          color: AppTheme.primaryColor
-              .withValues(
-            alpha: 0.2,
+          color: const Color(
+            0xFFF0DEC0,
           ),
         ),
       ),
@@ -1443,6 +1294,8 @@ class _ServerResultCard
         CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment:
+            CrossAxisAlignment.start,
             children: [
               Container(
                 width: 42,
@@ -1458,10 +1311,10 @@ class _ServerResultCard
                   ),
                 ),
                 child: const Icon(
-                  Icons
-                      .auto_awesome_rounded,
-                  color: AppTheme
-                      .primaryColor,
+                  Icons.search_rounded,
+                  color: Color(
+                    0xFF8B641F,
+                  ),
                 ),
               ),
 
@@ -1469,28 +1322,31 @@ class _ServerResultCard
                 width: 12,
               ),
 
-              Expanded(
+              const Expanded(
                 child: Column(
                   crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  CrossAxisAlignment
+                      .start,
                   children: [
-                    const Text(
-                      'AI 추정 결과',
-                      style: TextStyle(
+                    Text(
+                      'AI가 품목을 정확히 '
+                          '구분하지 못했어요',
+                      style:
+                      TextStyle(
                         fontWeight:
                         FontWeight.w800,
+                        fontSize: 15,
                       ),
                     ),
 
+                    SizedBox(
+                      height: 4,
+                    ),
+
                     Text(
-                      result.detected
-                          ? 'Python YOLO가 사진의 '
-                          '형태를 바탕으로 품목을 '
-                          '추정했어요.'
-                          : '지원하는 품목을 '
-                          '찾지 못했어요.',
+                      '촬영을 잘못한 것은 아닐 수 있어요.',
                       style:
-                      const TextStyle(
+                      TextStyle(
                         color: AppTheme
                             .textSecondaryColor,
                         fontSize: 12,
@@ -1506,168 +1362,125 @@ class _ServerResultCard
             height: 16,
           ),
 
-          _ResultRow(
-            label: '상태',
-            value:
-            result.analysisStatus,
+          Text(
+            message,
+            style:
+            const TextStyle(
+              fontSize: 13,
+              height: 1.55,
+            ),
           ),
 
-          if (result.label != null)
-            _ResultRow(
-              label: 'AI Label',
-              value: result.label!,
-            ),
-
-          if (result.wasteItemName !=
-              null)
-            _ResultRow(
-              label: '추정 품목',
-              value:
-              result.wasteItemName!,
-            ),
-
-          if (confidence != null)
-            _ResultRow(
-              label: '신뢰도',
-              value:
-              '${(confidence * 100).toStringAsFixed(1)}%',
-            ),
-
-          _ResultRow(
-            label: '탐지 개수',
-            value:
-            '${result.detectionCount}',
+          const SizedBox(
+            height: 9,
           ),
 
-          if (result.modelVersion !=
-              null)
-            _ResultRow(
-              label: '모델',
-              value:
-              result.modelVersion!,
+          const Text(
+            '품목을 직접 검색하면 '
+                '선택한 품목을 기준으로 '
+                '분리배출 방법과 거주지별 '
+                '배출 일정을 확인할 수 있어요.',
+            style:
+            TextStyle(
+              fontSize: 13,
+              height: 1.55,
             ),
+          ),
 
-          if (result.detected) ...[
-            const SizedBox(
-              height: 12,
+          const SizedBox(
+            height: 14,
+          ),
+
+          Container(
+            width: double.infinity,
+            padding:
+            const EdgeInsets.all(
+              13,
             ),
-
-            Container(
-              width:
-              double.infinity,
-              padding:
-              const EdgeInsets.all(
+            decoration:
+            BoxDecoration(
+              color: Colors.white
+                  .withValues(
+                alpha: 0.75,
+              ),
+              borderRadius:
+              BorderRadius.circular(
                 13,
               ),
-              decoration:
-              BoxDecoration(
-                color:
-                const Color(
-                  0xFFFFF7E8,
-                ),
-                borderRadius:
-                BorderRadius.circular(
-                  13,
-                ),
-              ),
-              child: const Row(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons
-                        .info_outline_rounded,
-                    size: 19,
-                  ),
-
-                  SizedBox(
-                    width: 8,
-                  ),
-
-                  Expanded(
-                    child: Text(
-                      'AI가 인식한 품목과 '
-                          '실제 재활용 가능 여부는 '
-                          '다를 수 있습니다. '
-                          '재질 표시와 오염 상태를 '
-                          '직접 확인해주세요.',
-                      style:
-                      TextStyle(
-                        fontSize: 12,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
-          ],
-
-          if (onOpenDetail != null) ...[
-            const SizedBox(
-              height: 14,
-            ),
-
-            SizedBox(
-              width: double.infinity,
-              child:
-              ElevatedButton.icon(
-                onPressed:
-                onOpenDetail,
-                icon: const Icon(
-                  Icons
-                      .fact_check_outlined,
-                ),
-                label: const Text(
-                  '배출 전 확인하기',
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultRow
-    extends StatelessWidget {
-  const _ResultRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(
-      BuildContext context,
-      ) {
-    return Padding(
-      padding:
-      const EdgeInsets.only(
-        bottom: 7,
-      ),
-      child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 92,
-            child: Text(
-              label,
+            child:
+            const Text(
+              '현재 AI 우선 인식 품목\n'
+                  '종이박스 · 페트병 · 플라스틱 용기 · '
+                  '캔 · 유리병 · 스티로폼',
               style:
-              const TextStyle(
+              TextStyle(
                 color: AppTheme
                     .textSecondaryColor,
+                fontSize: 11,
+                height: 1.55,
               ),
             ),
           ),
 
-          Expanded(
-            child: Text(
-              value,
+          const SizedBox(
+            height: 18,
+          ),
+
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child:
+            ElevatedButton.icon(
+              onPressed:
+              isCorrecting
+                  ? null
+                  : onSearch,
+              icon:
+              isCorrecting
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child:
+                CircularProgressIndicator(
+                  strokeWidth:
+                  2,
+                ),
+              )
+                  : const Icon(
+                Icons
+                    .search_rounded,
+              ),
+              label: Text(
+                isCorrecting
+                    ? '선택한 품목 저장 중...'
+                    : '품목 직접 검색하기',
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 9,
+          ),
+
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child:
+            OutlinedButton.icon(
+              onPressed:
+              isCorrecting
+                  ? null
+                  : onRetake,
+              icon:
+              const Icon(
+                Icons
+                    .photo_camera_outlined,
+              ),
+              label:
+              const Text(
+                '다시 촬영하기',
+              ),
             ),
           ),
         ],
@@ -1676,9 +1489,9 @@ class _ResultRow
   }
 }
 
-class _AnalysisFlowCard
+class _SimpleFlowGuide
     extends StatelessWidget {
-  const _AnalysisFlowCard();
+  const _SimpleFlowGuide();
 
   @override
   Widget build(
@@ -1698,51 +1511,53 @@ class _AnalysisFlowCard
           18,
         ),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment:
         CrossAxisAlignment.start,
         children: [
           Text(
-            'AI 분석 흐름',
+            '더 정확하게 분석하려면',
             style:
-            Theme.of(context)
-                .textTheme
-                .titleMedium,
+            TextStyle(
+              fontSize: 15,
+              fontWeight:
+              FontWeight.w800,
+            ),
           ),
 
-          const SizedBox(
+          SizedBox(
             height: 14,
           ),
 
-          const _FlowRow(
-            number: '1',
+          _GuideRow(
+            icon:
+            Icons
+                .center_focus_strong,
             text:
-            'Flutter에서 사진을 선택하거나 촬영',
+            '버릴 물건 하나가 잘 보이도록 촬영해주세요.',
           ),
 
-          const _FlowRow(
-            number: '2',
-            text:
-            '원본 이미지를 서버에 안전하게 저장',
+          SizedBox(
+            height: 12,
           ),
 
-          const _FlowRow(
-            number: '3',
+          _GuideRow(
+            icon:
+            Icons
+                .wb_sunny_outlined,
             text:
-            '모바일 AI가 품목을 1차 분석',
+            '너무 어둡거나 역광인 장소는 피해주세요.',
           ),
 
-          const _FlowRow(
-            number: '4',
-            text:
-            '신뢰도가 낮으면 Python YOLO가 실제 이미지 재분석',
+          SizedBox(
+            height: 12,
           ),
 
-          const _FlowRow(
-            number: '5',
+          _GuideRow(
+            icon:
+            Icons.layers_outlined,
             text:
-            '분리배출 가이드와 내 지역 일정 안내',
-            last: true,
+            '여러 물건이 겹치지 않도록 분리해서 촬영해주세요.',
           ),
         ],
       ),
@@ -1750,69 +1565,79 @@ class _AnalysisFlowCard
   }
 }
 
-class _FlowRow
+class _GuideRow
     extends StatelessWidget {
-  const _FlowRow({
-    required this.number,
+  const _GuideRow({
+    required this.icon,
     required this.text,
-    this.last = false,
   });
 
-  final String number;
-  final String text;
+  final IconData icon;
 
-  final bool last;
+  final String text;
 
   @override
   Widget build(
       BuildContext context,
       ) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom:
-        last ? 0 : 12,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment:
-            Alignment.center,
-            decoration:
-            BoxDecoration(
-              color: AppTheme
-                  .primaryColor
-                  .withValues(
-                alpha: 0.1,
-              ),
-              shape:
-              BoxShape.circle,
-            ),
-            child: Text(
-              number,
-              style:
-              const TextStyle(
-                color: AppTheme
-                    .primaryColor,
-                fontWeight:
-                FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-          ),
+    return Row(
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 19,
+          color:
+          AppTheme.primaryColor,
+        ),
 
-          const SizedBox(
-            width: 10,
-          ),
+        const SizedBox(
+          width: 10,
+        ),
 
-          Expanded(
-            child: Text(
-              text,
+        Expanded(
+          child: Text(
+            text,
+            style:
+            const TextStyle(
+              fontSize: 13,
+              height: 1.45,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
+
+class _FinalAiResult {
+  const _FinalAiResult({
+    required this.imageLogId,
+    required this.wasteItemId,
+    required this.wasteItemName,
+    required this.confidence,
+    required this.modelVersion,
+    required this.userCorrected,
+  });
+
+  final int imageLogId;
+
+  final int wasteItemId;
+
+  final String wasteItemName;
+
+  final double? confidence;
+
+  final String? modelVersion;
+
+  final bool userCorrected;
+}
+
+class _AiFlowException
+    implements Exception {
+  const _AiFlowException(
+      this.message,
+      );
+
+  final String message;
 }
