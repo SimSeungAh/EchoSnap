@@ -1,0 +1,21 @@
+{
+  "project": "SmartRecycle Web Admin",
+  "generated_at": "2026-08-31",
+  "features": [
+    "admin login/auth guard",
+    "dashboard",
+    "user management",
+    "residence approval management",
+    "collection area management",
+    "schedule management",
+    "waste item management",
+    "recycle guide management",
+    "AI correction review",
+    "public data sync management",
+    "notification management",
+    "settings/security info",
+    "demo mock mode",
+    "real API endpoint centralization"
+  ],
+  "note": "node_modules and dist intentionally excluded"
+}
