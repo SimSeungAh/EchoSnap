@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:smart_recycle/features/ai/presentation/pages/ai_capture_page.dart';
+import 'package:smart_recycle/features/ai/presentation/pages/ai_disposal_check_page.dart';
 import 'package:smart_recycle/features/auth/presentation/pages/login_page.dart';
 import 'package:smart_recycle/features/home/presentation/pages/home_page.dart';
 import 'package:smart_recycle/features/residence/presentation/pages/residence_setup_page.dart';
@@ -12,15 +13,21 @@ class AppRoutes {
   AppRoutes._();
 
   static const String splash = '/';
-  static const String login = '/login';
+
+  static const String login =
+      '/login';
 
   static const String aiCapture =
       '/ai-capture';
 
+  static const String aiDisposalCheck =
+      '/ai-disposal-check';
+
   static const String residenceSetup =
       '/residence-setup';
 
-  static const String home = '/home';
+  static const String home =
+      '/home';
 
   static const String wasteSearch =
       '/waste-search';
@@ -43,6 +50,63 @@ class AppRoutes {
         );
 
       case aiCapture:
+        return MaterialPageRoute(
+          builder: (_) =>
+          const AiCapturePage(),
+          settings: settings,
+        );
+
+      case aiDisposalCheck:
+        final dynamic arguments =
+            settings.arguments;
+
+        if (arguments
+        is Map<String, dynamic>) {
+          final int? wasteItemId =
+          (arguments[
+          'wasteItemId'
+          ] as num?)
+              ?.toInt();
+
+          final String?
+          wasteItemName =
+          arguments[
+          'wasteItemName'
+          ] as String?;
+
+          final double? confidence =
+          (arguments[
+          'confidence'
+          ] as num?)
+              ?.toDouble();
+
+          final String? modelVersion =
+          arguments[
+          'modelVersion'
+          ] as String?;
+
+          if (wasteItemId != null &&
+              wasteItemId > 0 &&
+              wasteItemName != null &&
+              wasteItemName
+                  .isNotEmpty) {
+            return MaterialPageRoute(
+              builder: (_) =>
+                  AiDisposalCheckPage(
+                    wasteItemId:
+                    wasteItemId,
+                    wasteItemName:
+                    wasteItemName,
+                    confidence:
+                    confidence,
+                    modelVersion:
+                    modelVersion,
+                  ),
+              settings: settings,
+            );
+          }
+        }
+
         return MaterialPageRoute(
           builder: (_) =>
           const AiCapturePage(),
@@ -80,7 +144,8 @@ class AppRoutes {
       case wasteDetail:
         final int? wasteItemId =
         settings.arguments is int
-            ? settings.arguments as int
+            ? settings.arguments
+        as int
             : null;
 
         if (wasteItemId == null) {
