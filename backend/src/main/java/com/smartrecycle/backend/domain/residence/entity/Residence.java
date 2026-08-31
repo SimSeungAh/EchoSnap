@@ -6,6 +6,8 @@ import com.smartrecycle.backend.global.entity.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -25,7 +27,8 @@ import java.util.List;
  * 주소 기반 지역 수거 일정을 사용하는
  * 일반주택 사용자의 거주지 정보입니다.
  *
- * 주소와 행정구역 정보를 보관하고,
+ * 주소와 행정구역 정보,
+ * 일반주택 세부 유형을 보관하고,
  * 폐기물 종류별 CollectionArea 적용 관계를 관리합니다.
  */
 @Getter
@@ -49,6 +52,23 @@ public class Residence extends BaseEntity {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
+
+  /**
+   * 일반주택의 세부 주거 형태입니다.
+   *
+   * 기존 Residence 데이터와의 호환을 위해
+   * 현재 개발 단계에서는 nullable로 둡니다.
+   *
+   * 모든 기존 데이터가 갱신된 뒤
+   * 운영 마이그레이션에서는 NOT NULL로
+   * 변경할 수 있습니다.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(
+      name = "general_housing_type",
+      length = 30
+  )
+  private GeneralHousingType generalHousingType;
 
   @Column(
       name = "address_name",
@@ -146,6 +166,7 @@ public class Residence extends BaseEntity {
       collectionAreaMappings = new ArrayList<>();
 
   private Residence(
+      GeneralHousingType generalHousingType,
       String addressName,
       String roadAddress,
       String jibunAddress,
@@ -160,6 +181,9 @@ public class Residence extends BaseEntity {
       BigDecimal latitude,
       BigDecimal longitude
   ) {
+    this.generalHousingType =
+        generalHousingType;
+
     this.addressName = addressName;
     this.roadAddress = roadAddress;
     this.jibunAddress = jibunAddress;
@@ -168,7 +192,8 @@ public class Residence extends BaseEntity {
     this.sido = sido;
     this.sigungu = sigungu;
     this.legalDong = legalDong;
-    this.administrativeDong = administrativeDong;
+    this.administrativeDong =
+        administrativeDong;
     this.legalDongCode = legalDongCode;
     this.administrativeDongCode =
         administrativeDongCode;
@@ -177,6 +202,7 @@ public class Residence extends BaseEntity {
   }
 
   public static Residence create(
+      GeneralHousingType generalHousingType,
       String addressName,
       String roadAddress,
       String jibunAddress,
@@ -192,6 +218,7 @@ public class Residence extends BaseEntity {
       BigDecimal longitude
   ) {
     return new Residence(
+        generalHousingType,
         addressName,
         roadAddress,
         jibunAddress,
@@ -209,13 +236,16 @@ public class Residence extends BaseEntity {
   }
 
   /**
-   * 사용자의 주소를 변경합니다.
+   * 사용자의 일반주택 정보와 주소를 변경합니다.
    *
-   * 주소가 바뀌면 기존 수거구역 적용 관계는
-   * 더 이상 유효하다고 보장할 수 없으므로 제거합니다.
-   * 이후 새 주소 기준으로 다시 매핑합니다.
+   * 주소 또는 주거 형태가 바뀌면
+   * 기존 수거구역 적용 관계는 더 이상
+   * 유효하다고 보장할 수 없으므로 제거합니다.
+   *
+   * 이후 새 정보 기준으로 다시 매핑합니다.
    */
   public void update(
+      GeneralHousingType generalHousingType,
       String addressName,
       String roadAddress,
       String jibunAddress,
@@ -230,6 +260,9 @@ public class Residence extends BaseEntity {
       BigDecimal latitude,
       BigDecimal longitude
   ) {
+    this.generalHousingType =
+        generalHousingType;
+
     this.addressName = addressName;
     this.roadAddress = roadAddress;
     this.jibunAddress = jibunAddress;
@@ -238,7 +271,8 @@ public class Residence extends BaseEntity {
     this.sido = sido;
     this.sigungu = sigungu;
     this.legalDong = legalDong;
-    this.administrativeDong = administrativeDong;
+    this.administrativeDong =
+        administrativeDong;
     this.legalDongCode = legalDongCode;
     this.administrativeDongCode =
         administrativeDongCode;
@@ -268,6 +302,7 @@ public class Residence extends BaseEntity {
       existing.changeCollectionArea(
           collectionArea
       );
+
       return;
     }
 
@@ -294,8 +329,9 @@ public class Residence extends BaseEntity {
   }
 
   /**
-   * 주소 변경 등으로 기존 매핑이
-   * 더 이상 유효하지 않을 때 전체 연결을 제거합니다.
+   * 주소 또는 주거형태 변경 등으로
+   * 기존 매핑이 더 이상 유효하지 않을 때
+   * 전체 연결을 제거합니다.
    */
   public void clearCollectionAreas() {
     collectionAreaMappings.clear();

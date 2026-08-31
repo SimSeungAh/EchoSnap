@@ -196,6 +196,8 @@ class _ResidenceSetupPageState
 
         await ResidenceSetupApi.saveResidence(
           address,
+          residenceType:
+          _selectedResidenceType!,
         );
       }
 

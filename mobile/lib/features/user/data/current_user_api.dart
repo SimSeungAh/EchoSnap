@@ -3,6 +3,94 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:smart_recycle/core/network/authenticated_api_client.dart';
 
+class CurrentUserApartment {
+  const CurrentUserApartment({
+    required this.id,
+    required this.name,
+    this.roadAddress,
+    this.jibunAddress,
+  });
+
+  final int id;
+  final String name;
+  final String? roadAddress;
+  final String? jibunAddress;
+
+  factory CurrentUserApartment.fromJson(
+      Map<String, dynamic> json,
+      ) {
+    return CurrentUserApartment(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? '',
+      roadAddress: json['roadAddress'] as String?,
+      jibunAddress: json['jibunAddress'] as String?,
+    );
+  }
+}
+
+class CurrentUserResidence {
+  const CurrentUserResidence({
+    required this.id,
+    this.addressName,
+    this.roadAddress,
+    this.jibunAddress,
+    this.buildingName,
+    this.zoneNo,
+    this.sido,
+    this.sigungu,
+    this.legalDong,
+    this.administrativeDong,
+  });
+
+  final int id;
+
+  final String? addressName;
+  final String? roadAddress;
+  final String? jibunAddress;
+  final String? buildingName;
+  final String? zoneNo;
+
+  final String? sido;
+  final String? sigungu;
+  final String? legalDong;
+  final String? administrativeDong;
+
+  factory CurrentUserResidence.fromJson(
+      Map<String, dynamic> json,
+      ) {
+    return CurrentUserResidence(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      addressName: json['addressName'] as String?,
+      roadAddress: json['roadAddress'] as String?,
+      jibunAddress: json['jibunAddress'] as String?,
+      buildingName: json['buildingName'] as String?,
+      zoneNo: json['zoneNo'] as String?,
+      sido: json['sido'] as String?,
+      sigungu: json['sigungu'] as String?,
+      legalDong: json['legalDong'] as String?,
+      administrativeDong:
+      json['administrativeDong'] as String?,
+    );
+  }
+
+  String get displayAddress {
+    final candidates = <String?>[
+      roadAddress,
+      addressName,
+      jibunAddress,
+    ];
+
+    for (final value in candidates) {
+      if (value != null &&
+          value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+
+    return '주소 정보 없음';
+  }
+}
+
 class CurrentUser {
   const CurrentUser({
     required this.id,
@@ -11,18 +99,24 @@ class CurrentUser {
     required this.role,
     required this.status,
     required this.residenceType,
+    required this.apartment,
+    required this.residence,
     required this.notificationEnabled,
     required this.locationEnabled,
     required this.onboardingCompleted,
   });
 
   final int id;
+
   final String email;
   final String nickname;
   final String role;
   final String status;
 
   final String? residenceType;
+
+  final CurrentUserApartment? apartment;
+  final CurrentUserResidence? residence;
 
   final bool notificationEnabled;
   final bool locationEnabled;
@@ -31,25 +125,48 @@ class CurrentUser {
   factory CurrentUser.fromJson(
       Map<String, dynamic> json,
       ) {
+    final dynamic apartmentJson =
+    json['apartment'];
+
+    final dynamic residenceJson =
+    json['residence'];
+
     return CurrentUser(
-      id: json['id'] as int? ?? 0,
+      id: (json['id'] as num?)?.toInt() ?? 0,
       email: json['email'] as String? ?? '',
-      nickname: json['nickname'] as String? ?? '',
+      nickname:
+      json['nickname'] as String? ?? '',
       role: json['role'] as String? ?? '',
       status: json['status'] as String? ?? '',
       residenceType:
       json['residenceType'] as String?,
+      apartment:
+      apartmentJson is Map<String, dynamic>
+          ? CurrentUserApartment.fromJson(
+        apartmentJson,
+      )
+          : null,
+      residence:
+      residenceJson is Map<String, dynamic>
+          ? CurrentUserResidence.fromJson(
+        residenceJson,
+      )
+          : null,
       notificationEnabled:
-      json['notificationEnabled'] as bool? ?? false,
+      json['notificationEnabled'] as bool? ??
+          false,
       locationEnabled:
-      json['locationEnabled'] as bool? ?? false,
+      json['locationEnabled'] as bool? ??
+          false,
       onboardingCompleted:
-      json['onboardingCompleted'] as bool? ?? false,
+      json['onboardingCompleted'] as bool? ??
+          false,
     );
   }
 }
 
-class CurrentUserApiException implements Exception {
+class CurrentUserApiException
+    implements Exception {
   const CurrentUserApiException(
       this.message, {
         this.unauthorized = false,
@@ -75,19 +192,32 @@ class CurrentUserApi {
       await AuthenticatedApiClient.get(
         '/api/users/me',
       );
-    } on AuthenticatedApiException catch (exception) {
+    } on AuthenticatedApiException catch (
+    exception
+    ) {
       throw CurrentUserApiException(
         exception.message,
-        unauthorized: exception.unauthorized,
+        unauthorized:
+        exception.unauthorized,
       );
     }
 
     Map<String, dynamic> body;
 
     try {
-      body = jsonDecode(
-        utf8.decode(response.bodyBytes),
-      ) as Map<String, dynamic>;
+      final dynamic decoded =
+      jsonDecode(
+        utf8.decode(
+          response.bodyBytes,
+        ),
+      );
+
+      if (decoded
+      is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+
+      body = decoded;
     } catch (_) {
       throw CurrentUserApiException(
         '사용자 정보를 처리할 수 없습니다. '

@@ -283,12 +283,35 @@ class ResidenceSetupApi {
   }
 
   static Future<void> saveResidence(
-      AddressSearchItem address,
-      ) async {
+      AddressSearchItem address, {
+        required String residenceType,
+      }) async {
+    final Map<String, dynamic> requestBody =
+    address.toSaveRequest();
+
+    requestBody['generalHousingType'] =
+        _toGeneralHousingType(
+          residenceType,
+        );
+
     await _patch(
       '/api/users/me/residence',
-      address.toSaveRequest(),
+      requestBody,
     );
+  }
+
+  static String _toGeneralHousingType(
+      String residenceType,
+      ) {
+    return switch (residenceType) {
+      '단독주택' => 'DETACHED_HOUSE',
+      '다가구주택' => 'MULTI_FAMILY_HOUSE',
+      '연립주택' => 'ROW_HOUSE',
+      '다세대주택' => 'MULTI_UNIT_HOUSE',
+      _ => throw const ResidenceSetupApiException(
+        '지원하지 않는 일반주택 유형입니다.',
+      ),
+    };
   }
 
   static Future<void> completeOnboarding() async {

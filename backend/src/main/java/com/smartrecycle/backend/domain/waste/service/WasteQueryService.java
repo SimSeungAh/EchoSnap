@@ -2,6 +2,9 @@ package com.smartrecycle.backend.domain.waste.service;
 
 import com.smartrecycle.backend.domain.schedule.dto.response.WasteItemScheduleResponse;
 import com.smartrecycle.backend.domain.schedule.service.RecycleScheduleQueryService;
+import com.smartrecycle.backend.domain.user.entity.ResidenceType;
+import com.smartrecycle.backend.domain.user.entity.User;
+import com.smartrecycle.backend.domain.user.repository.UserRepository;
 import com.smartrecycle.backend.domain.waste.dto.response.WasteCategoryResponse;
 import com.smartrecycle.backend.domain.waste.dto.response.WasteItemDetailResponse;
 import com.smartrecycle.backend.domain.waste.dto.response.WasteItemSummaryResponse;
@@ -34,10 +37,12 @@ public class WasteQueryService {
     private final RecycleGuideRepository recycleGuideRepository;
 
     private final RecycleGuideCheckItemRepository
-            recycleGuideCheckItemRepository;
+        recycleGuideCheckItemRepository;
 
     private final RecycleScheduleQueryService
-            recycleScheduleQueryService;
+        recycleScheduleQueryService;
+
+    private final UserRepository userRepository;
 
     /**
      * 일반 사용자에게 노출할 활성 카테고리 목록을 조회합니다.
@@ -47,10 +52,10 @@ public class WasteQueryService {
      */
     public List<WasteCategoryResponse> getCategories() {
         return wasteCategoryRepository
-                .findAllByActiveTrueOrderBySortOrderAscNameAsc()
-                .stream()
-                .map(WasteCategoryResponse::from)
-                .toList();
+            .findAllByActiveTrueOrderBySortOrderAscNameAsc()
+            .stream()
+            .map(WasteCategoryResponse::from)
+            .toList();
     }
 
     /**
@@ -65,49 +70,55 @@ public class WasteQueryService {
      * - 값이 있으면 해당 활성 카테고리의 품목만 조회
      */
     public PageResponse<WasteItemSummaryResponse> searchItems(
-            String keyword,
-            Long categoryId,
-            Pageable pageable
+        String keyword,
+        Long categoryId,
+        Pageable pageable
     ) {
         if (categoryId != null) {
             getActiveCategory(categoryId);
         }
 
         Page<WasteItem> wasteItemPage =
-                wasteItemRepository.searchActiveItems(
-                        normalizeKeyword(keyword),
-                        categoryId,
-                        pageable
-                );
+            wasteItemRepository.searchActiveItems(
+                normalizeKeyword(keyword),
+                categoryId,
+                pageable
+            );
 
         return PageResponse.from(
-                wasteItemPage,
-                WasteItemSummaryResponse::from
+            wasteItemPage,
+            WasteItemSummaryResponse::from
         );
     }
 
     /**
      * 일반 사용자용 폐기물 품목 상세 정보를 조회합니다.
      *
-     * 반환 정보:
+     * 공통 반환 정보:
      * - 품목 기본 정보
      * - 소속 카테고리
      * - 분리배출 가이드
      * - 체크리스트
-     * - 로그인 사용자의 아파트 배출 일정
-     * - 오늘 배출 가능 여부
-     * - 현재 배출 가능 여부
-     * - 다음 배출일
+     *
+     * MANAGED_COMPLEX:
+     * - 현재 선택한 공동주택의 품목별 일정도 함께 반환합니다.
+     *
+     * GENERAL_HOUSING:
+     * - Apartment 일정을 강제로 조회하지 않습니다.
+     * - 지역 수거구역 일정은
+     *   /api/schedules/me/general-housing API에서 조회합니다.
      *
      * 품목에 가이드가 아직 등록되지 않은 경우
      * guide는 null로 반환합니다.
      */
     public WasteItemDetailResponse getItemDetail(
-            Long userId,
-            Long wasteItemId
+        Long userId,
+        Long wasteItemId
     ) {
+        User user = getUser(userId);
+
         WasteItem wasteItem =
-                getActiveWasteItem(wasteItemId);
+            getActiveWasteItem(wasteItemId);
 
         /*
          * 품목 자체가 활성화되어 있어도
@@ -116,68 +127,92 @@ public class WasteQueryService {
          */
         if (!wasteItem.getCategory().isActive()) {
             throw new CustomException(
-                    ErrorCode.WASTE_ITEM_NOT_FOUND
+                ErrorCode.WASTE_ITEM_NOT_FOUND
             );
         }
 
         RecycleGuide recycleGuide =
-                recycleGuideRepository
-                        .findByWasteItemId(wasteItemId)
-                        .orElse(null);
+            recycleGuideRepository
+                .findByWasteItemId(wasteItemId)
+                .orElse(null);
 
         List<RecycleGuideCheckItem> checkItems =
-                getCheckItems(recycleGuide);
+            getCheckItems(recycleGuide);
+
+        WasteItemScheduleResponse schedule = null;
 
         /*
-         * 로그인 사용자가 설정한 거주 아파트를 기준으로
-         * 해당 품목의 공식 배출 일정을 계산합니다.
+         * 관리주체의 자체 일정을 사용하는
+         * MANAGED_COMPLEX 사용자만 Apartment 기반
+         * RecycleSchedule을 조회합니다.
          *
-         * 사용자가 아직 아파트를 설정하지 않았다면
-         * USER_APARTMENT_NOT_SET 오류가 발생합니다.
+         * 일반주택 사용자는 별도의
+         * CollectionAreaSchedule을 사용하므로
+         * 여기서 Apartment 일정을 강제로 조회하지 않습니다.
          */
-        WasteItemScheduleResponse schedule =
+        if (
+            user.getResidenceType()
+                == ResidenceType.MANAGED_COMPLEX
+        ) {
+            schedule =
                 recycleScheduleQueryService
-                        .getMyWasteItemSchedule(
-                                userId,
-                                wasteItemId
-                        );
+                    .getMyWasteItemSchedule(
+                        userId,
+                        wasteItemId
+                    );
+        }
 
         return WasteItemDetailResponse.from(
-                wasteItem,
-                recycleGuide,
-                checkItems,
-                schedule
+            wasteItem,
+            recycleGuide,
+            checkItems,
+            schedule
         );
+    }
+
+    /**
+     * 로그인 사용자 조회
+     */
+    private User getUser(
+        Long userId
+    ) {
+        return userRepository
+            .findById(userId)
+            .orElseThrow(
+                () -> new CustomException(
+                    ErrorCode.USER_NOT_FOUND
+                )
+            );
     }
 
     /**
      * 활성화된 폐기물 카테고리를 조회합니다.
      */
     private WasteCategory getActiveCategory(
-            Long categoryId
+        Long categoryId
     ) {
         return wasteCategoryRepository
-                .findByIdAndActiveTrue(categoryId)
-                .orElseThrow(
-                        () -> new CustomException(
-                                ErrorCode.WASTE_CATEGORY_NOT_FOUND
-                        )
-                );
+            .findByIdAndActiveTrue(categoryId)
+            .orElseThrow(
+                () -> new CustomException(
+                    ErrorCode.WASTE_CATEGORY_NOT_FOUND
+                )
+            );
     }
 
     /**
      * 활성화된 폐기물 품목을 조회합니다.
      */
     private WasteItem getActiveWasteItem(
-            Long wasteItemId
+        Long wasteItemId
     ) {
         return wasteItemRepository
-                .findByIdAndActiveTrue(wasteItemId)
-                .orElseThrow(
-                        () -> new CustomException(
-                                ErrorCode.WASTE_ITEM_NOT_FOUND
-                        )
-                );
+            .findByIdAndActiveTrue(wasteItemId)
+            .orElseThrow(
+                () -> new CustomException(
+                    ErrorCode.WASTE_ITEM_NOT_FOUND
+                )
+            );
     }
 
     /**
@@ -185,16 +220,16 @@ public class WasteQueryService {
      * 가이드가 없으면 빈 목록을 반환합니다.
      */
     private List<RecycleGuideCheckItem> getCheckItems(
-            RecycleGuide recycleGuide
+        RecycleGuide recycleGuide
     ) {
         if (recycleGuide == null) {
             return List.of();
         }
 
         return recycleGuideCheckItemRepository
-                .findAllByRecycleGuide_IdOrderBySortOrderAscIdAsc(
-                        recycleGuide.getId()
-                );
+            .findAllByRecycleGuide_IdOrderBySortOrderAscIdAsc(
+                recycleGuide.getId()
+            );
     }
 
     /**
@@ -204,9 +239,12 @@ public class WasteQueryService {
      * Repository 검색 조건에 맞춰 빈 문자열을 반환합니다.
      */
     private String normalizeKeyword(
-            String keyword
+        String keyword
     ) {
-        if (keyword == null || keyword.isBlank()) {
+        if (
+            keyword == null
+                || keyword.isBlank()
+        ) {
             return "";
         }
 

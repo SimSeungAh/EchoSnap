@@ -26,7 +26,8 @@ public class UserService {
 
     private final UserRepository userRepository;
 
-    private final ApartmentRepository apartmentRepository;
+    private final ApartmentRepository
+        apartmentRepository;
 
     private final ResidenceCollectionAreaMatchService
         residenceCollectionAreaMatchService;
@@ -134,7 +135,8 @@ public class UserService {
             );
 
         Apartment apartment =
-            apartmentRepository.findById(
+            apartmentRepository
+                .findById(
                     request.apartmentId()
                 )
                 .orElseThrow(
@@ -166,17 +168,19 @@ public class UserService {
      * 주소 기반 지역 수거 일정을 사용하는
      * 일반주택 거주지를 설정하거나 변경합니다.
      *
-     * 최초 설정인 경우 Residence를 새로 생성하고,
-     * 이미 일반주택 주소가 설정되어 있는 경우에는
-     * 기존 Residence를 수정합니다.
+     * 단독주택 / 다가구주택 / 연립주택 /
+     * 다세대주택 중 사용자가 선택한
+     * 세부 주거 형태도 함께 저장합니다.
+     *
+     * 최초 설정이면 Residence를 생성하고,
+     * 기존 주소가 있으면 같은 Residence를 갱신합니다.
      *
      * 주소를 설정하면 사용자의 residenceType은
-     * GENERAL_HOUSING으로 함께 변경되고,
-     * 기존 Apartment 연결은 제거됩니다.
+     * GENERAL_HOUSING으로 변경되고,
+     * Apartment 연결은 제거됩니다.
      *
-     * 그 후 행정동/법정동 정보를 기준으로
-     * 생활쓰레기, 음식물쓰레기, 재활용품 각각에
-     * 적용되는 CollectionArea를 자동 매칭합니다.
+     * 이후 주소와 세부 주거 형태를 기준으로
+     * CollectionArea를 다시 매칭합니다.
      */
     @Transactional
     public UserResponse updateResidence(
@@ -195,6 +199,7 @@ public class UserService {
 
             residence =
                 Residence.create(
+                    request.generalHousingType(),
                     request.addressName(),
                     request.roadAddress(),
                     request.jibunAddress(),
@@ -213,6 +218,7 @@ public class UserService {
         } else {
 
             residence.update(
+                request.generalHousingType(),
                 request.addressName(),
                 request.roadAddress(),
                 request.jibunAddress(),
@@ -230,20 +236,20 @@ public class UserService {
         }
 
         /*
-         * 먼저 일반주택 Residence를 User와 연결합니다.
+         * 먼저 일반주택 Residence를
+         * 현재 사용자와 연결합니다.
          */
         user.changeToGeneralHousing(
             residence
         );
 
         /*
-         * 저장된 주소를 기준으로
-         * 실제 지자체 CollectionArea 후보를 찾고
-         * 폐기물 종류별로 확실한 경우에만 연결합니다.
+         * 저장된 주소와 세부 주거 형태를 기준으로
+         * 실제 지자체 CollectionArea 후보를 찾습니다.
          *
-         * 공공데이터가 아직 동기화되지 않았거나
-         * 매칭 결과가 애매하더라도
-         * 사용자 주소 저장 자체는 정상적으로 완료됩니다.
+         * 공공데이터가 동기화되어 있지 않거나
+         * 매칭 결과가 애매해도
+         * 주소 저장 자체는 정상 완료됩니다.
          */
         residenceCollectionAreaMatchService
             .matchAndAssign(
@@ -261,7 +267,8 @@ public class UserService {
     private User getUser(
         Long userId
     ) {
-        return userRepository.findById(
+        return userRepository
+            .findById(
                 userId
             )
             .orElseThrow(
