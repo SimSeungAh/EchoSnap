@@ -3,6 +3,7 @@ package com.smartrecycle.backend.domain.address.dto.response;
 import com.smartrecycle.backend.domain.address.dto.external.KakaoAddressSearchResponse;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Flutter 사용자 앱에 반환하는 SmartRecycle 내부 주소 검색 결과 DTO입니다.
@@ -25,6 +26,8 @@ public record AddressSearchResultResponse(
     BigDecimal latitude,
     BigDecimal longitude
 ) {
+
+  private static final int COORDINATE_SCALE = 7;
 
   public static AddressSearchResultResponse from(
       KakaoAddressSearchResponse.Document document
@@ -73,19 +76,30 @@ public record AddressSearchResultResponse(
         address != null
             ? blankToNull(address.hCode())
             : null,
-        toBigDecimal(document.y()),
-        toBigDecimal(document.x())
+        toCoordinate(document.y()),
+        toCoordinate(document.x())
     );
   }
 
-  private static BigDecimal toBigDecimal(
+  /**
+   * 카카오 API 좌표는 소수점 자릿수가 길 수 있습니다.
+   *
+   * SmartRecycle의 요청 DTO와 DB 좌표 컬럼은
+   * 소수점 7자리 기준이므로 외부 API 응답을
+   * 내부 형식으로 변환하는 시점에 동일한 정밀도로 정규화합니다.
+   */
+  private static BigDecimal toCoordinate(
       String value
   ) {
     if (value == null || value.isBlank()) {
       return null;
     }
 
-    return new BigDecimal(value);
+    return new BigDecimal(value)
+        .setScale(
+            COORDINATE_SCALE,
+            RoundingMode.HALF_UP
+        );
   }
 
   private static String blankToNull(
