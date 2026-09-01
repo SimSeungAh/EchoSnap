@@ -31,6 +31,12 @@ export type CollectionWasteType =
   | 'FOOD_WASTE'
   | 'RECYCLABLE';
 
+/**
+ * 실제 CollectionArea 원본.
+ *
+ * 관리자 그룹 상세에서 각 공공데이터/수동 등록 원본을
+ * 확인하거나 수정할 때 사용합니다.
+ */
 export interface CollectionArea {
   id: number;
   name: string;
@@ -40,9 +46,36 @@ export interface CollectionArea {
   targetAreaName?: string;
   externalManagementNumber?: string;
   wasteTypes?: CollectionWasteType[];
+  sourceReferenceDate?: string;
   active: boolean;
+  createdAt?: string;
   updatedAt: string;
   sourceType?: CollectionAreaSourceType;
+}
+
+/**
+ * 관리자 수거구역 목록의 한 행.
+ *
+ * 실제 CollectionArea 원본 여러 건을
+ * 화면에서 하나의 지역 그룹으로 표시합니다.
+ */
+export interface CollectionAreaGroup {
+  sido: string;
+  district: string;
+  targetAreaName: string;
+  sourceType: CollectionAreaSourceType;
+  active: boolean;
+  originalCount: number;
+}
+
+/**
+ * 지역 그룹 상세.
+ *
+ * 목록에서 묶어 놓은 실제 CollectionArea 원본을
+ * originals에서 모두 확인할 수 있습니다.
+ */
+export interface CollectionAreaGroupDetail extends CollectionAreaGroup {
+  originals: CollectionArea[];
 }
 
 export interface PageResult<T> {
@@ -62,7 +95,6 @@ export interface Schedule {
   note: string;
   active: boolean;
 }
-
 
 export type CollectionScheduleSourceType =
   | 'PUBLIC_DATA'
@@ -94,7 +126,6 @@ export interface AreaScheduleCoverage {
   schedules: GeneralHousingSchedule[];
   missingWasteTypes: CollectionWasteType[];
 }
-
 
 export interface WasteTypeCoverage {
   wasteType: CollectionWasteType;

@@ -1,4 +1,4 @@
-import { CONFIG, ENDPOINTS } from './config';
+import { CONFIG, ENDPOINTS } from "./config";
 import {
   initialAreas,
   initialCorrections,
@@ -10,12 +10,15 @@ import {
   initialSyncLogs,
   initialUsers,
   initialWasteItems,
-} from './mockData';
+} from "./mockData";
 import type {
   AiCorrection,
   ApartmentSchedule,
   AreaScheduleCoverage,
+  AreaScheduleGroupCoverage,
   CollectionArea,
+  CollectionAreaGroup,
+  CollectionAreaGroupDetail,
   CollectionWasteType,
   Dashboard,
   GeneralHousingSchedule,
@@ -29,13 +32,13 @@ import type {
   User,
   UserStatus,
   WasteItem,
-} from './types';
+} from "./types";
 
-const ACCESS = 'smartrecycle_admin_access';
-const REFRESH = 'smartrecycle_admin_refresh';
-const SESSION = 'smartrecycle_admin_session';
+const ACCESS = "smartrecycle_admin_access";
+const REFRESH = "smartrecycle_admin_refresh";
+const SESSION = "smartrecycle_admin_session";
 
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type JsonRecord = Record<string, unknown>;
 
 type BackendTokenResponse = {
@@ -56,9 +59,9 @@ type BackendUser = {
   id: number;
   email: string;
   name: string;
-  role: 'USER' | 'ADMIN';
-  status: 'ACTIVE' | 'SUSPENDED' | 'WITHDRAWN';
-  residenceType?: 'MANAGED_COMPLEX' | 'GENERAL_HOUSING' | null;
+  role: "USER" | "ADMIN";
+  status: "ACTIVE" | "SUSPENDED" | "WITHDRAWN";
+  residenceType?: "MANAGED_COMPLEX" | "GENERAL_HOUSING" | null;
   residenceName?: string | null;
   address?: string | null;
   createdAt?: string | null;
@@ -77,23 +80,38 @@ type BackendApartment = {
 
 type BackendCollectionArea = {
   id: number;
-  sourceType: 'MOIS_HOUSEHOLD_WASTE' | 'MANUAL';
+  sourceType: "MOIS_HOUSEHOLD_WASTE" | "MANUAL";
   externalManagementNumber?: string | null;
   sido: string;
   sigungu: string;
   areaName: string;
   targetAreaName?: string | null;
-  supportedWasteTypes: Array<'LIFE_WASTE' | 'FOOD_WASTE' | 'RECYCLABLE'>;
+  supportedWasteTypes: Array<"LIFE_WASTE" | "FOOD_WASTE" | "RECYCLABLE">;
+  sourceReferenceDate?: string | null;
   active: boolean;
+  createdAt?: string | null;
   updatedAt?: string | null;
+};
+
+type BackendCollectionAreaGroup = {
+  sido: string;
+  sigungu: string;
+  targetAreaName: string;
+  sourceType: "MOIS_HOUSEHOLD_WASTE" | "MANUAL";
+  active: boolean;
+  originalCount: number;
+};
+
+type BackendCollectionAreaGroupDetail = BackendCollectionAreaGroup & {
+  originals: BackendCollectionArea[];
 };
 
 type BackendCollectionAreaSchedule = {
   id: number;
   collectionAreaId: number;
   collectionAreaName: string;
-  wasteType: 'LIFE_WASTE' | 'FOOD_WASTE' | 'RECYCLABLE';
-  sourceType: 'PUBLIC_DATA' | 'ADMIN_APPROVED_REPORT';
+  wasteType: "LIFE_WASTE" | "FOOD_WASTE" | "RECYCLABLE";
+  sourceType: "PUBLIC_DATA" | "ADMIN_APPROVED_REPORT";
   emissionDays: string;
   startTime?: string | null;
   endTime?: string | null;
@@ -103,23 +121,38 @@ type BackendCollectionAreaSchedule = {
   uncollectedDay?: string | null;
 };
 
-
 type BackendAreaScheduleCoverage = {
   collectionAreaId: number;
   collectionAreaName: string;
-  areaSourceType: 'MOIS_HOUSEHOLD_WASTE' | 'MANUAL';
+  areaSourceType: "MOIS_HOUSEHOLD_WASTE" | "MANUAL";
   externalManagementNumber?: string | null;
   sido: string;
   sigungu: string;
   targetAreaName?: string | null;
   active: boolean;
-  supportedWasteTypes: Array<
-    'LIFE_WASTE' | 'FOOD_WASTE' | 'RECYCLABLE'
-  >;
+  supportedWasteTypes: Array<"LIFE_WASTE" | "FOOD_WASTE" | "RECYCLABLE">;
   schedules: BackendCollectionAreaSchedule[];
-  missingWasteTypes: Array<
-    'LIFE_WASTE' | 'FOOD_WASTE' | 'RECYCLABLE'
-  >;
+  missingWasteTypes: Array<"LIFE_WASTE" | "FOOD_WASTE" | "RECYCLABLE">;
+};
+
+type BackendAreaScheduleGroupCoverage = {
+  representativeCollectionAreaId: number;
+  collectionAreaName: string;
+  sido: string;
+  sigungu: string;
+  targetAreaName?: string | null;
+  areaSourceType: "MOIS_HOUSEHOLD_WASTE" | "MANUAL";
+  active: boolean;
+  collectionAreaCount: number;
+  allSchedulesRegistered: boolean;
+  supportedWasteTypes: Array<"LIFE_WASTE" | "FOOD_WASTE" | "RECYCLABLE">;
+  wasteTypeCoverage: Array<{
+    wasteType: "LIFE_WASTE" | "FOOD_WASTE" | "RECYCLABLE";
+    supportedAreaCount: number;
+    registeredAreaCount: number;
+    missingAreaCount: number;
+  }>;
+  areas: BackendAreaScheduleCoverage[];
 };
 
 type BackendApartmentSchedule = {
@@ -190,7 +223,7 @@ type BackendCorrection = {
 type BackendSyncLog = {
   id: number;
   source: string;
-  status: 'SUCCESS' | 'FAILED' | 'RUNNING';
+  status: "SUCCESS" | "FAILED" | "RUNNING";
   startedAt?: string | null;
   finishedAt?: string | null;
   insertedCount: number;
@@ -203,7 +236,7 @@ type BackendNotification = {
   title: string;
   body: string;
   targetType: string;
-  status: 'SENT' | 'CANCELLED';
+  status: "SENT" | "CANCELLED";
   sentAt?: string | null;
 };
 
@@ -213,7 +246,7 @@ class HttpError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = 'HttpError';
+    this.name = "HttpError";
   }
 }
 
@@ -225,7 +258,7 @@ function clearAuth() {
 
 function expireSession() {
   clearAuth();
-  window.dispatchEvent(new Event('smartrecycle-auth-expired'));
+  window.dispatchEvent(new Event("smartrecycle-auth-expired"));
 }
 
 async function readPayload(response: Response): Promise<unknown> {
@@ -240,9 +273,9 @@ async function readPayload(response: Response): Promise<unknown> {
 }
 
 function payloadMessage(payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object') {
+  if (payload && typeof payload === "object") {
     const value = payload as JsonRecord;
-    if (typeof value.message === 'string' && value.message.trim()) {
+    if (typeof value.message === "string" && value.message.trim()) {
       return value.message;
     }
   }
@@ -251,7 +284,7 @@ function payloadMessage(payload: unknown, fallback: string): string {
 }
 
 function unwrapData<T>(payload: unknown): T {
-  if (payload && typeof payload === 'object' && 'data' in payload) {
+  if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as { data: T }).data;
   }
 
@@ -260,14 +293,14 @@ function unwrapData<T>(payload: unknown): T {
 
 async function requestWithoutAuth<T>(
   path: string,
-  method: Method = 'GET',
+  method: Method = "GET",
   body?: unknown,
 ): Promise<T> {
   const response = await fetch(`${CONFIG.apiBaseUrl}${path}`, {
     method,
     headers: {
-      Accept: 'application/json',
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      Accept: "application/json",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -295,7 +328,7 @@ async function reissueTokens(): Promise<boolean> {
       try {
         const tokens = await requestWithoutAuth<BackendTokenResponse>(
           ENDPOINTS.reissue,
-          'POST',
+          "POST",
           { refreshToken },
         );
 
@@ -319,7 +352,7 @@ async function reissueTokens(): Promise<boolean> {
 
 async function request<T>(
   path: string,
-  method: Method = 'GET',
+  method: Method = "GET",
   body?: unknown,
   retryOnUnauthorized = true,
 ): Promise<T> {
@@ -328,8 +361,8 @@ async function request<T>(
   const response = await fetch(`${CONFIG.apiBaseUrl}${path}`, {
     method,
     headers: {
-      Accept: 'application/json',
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      Accept: "application/json",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -342,7 +375,7 @@ async function request<T>(
     }
 
     expireSession();
-    throw new HttpError(401, '로그인이 만료되었습니다.');
+    throw new HttpError(401, "로그인이 만료되었습니다.");
   }
 
   const payload = await readPayload(response);
@@ -364,7 +397,7 @@ async function request<T>(
 function pageItems<T>(value: unknown): T[] {
   if (Array.isArray(value)) return value as T[];
 
-  if (value && typeof value === 'object') {
+  if (value && typeof value === "object") {
     const record = value as JsonRecord;
     if (Array.isArray(record.content)) return record.content as T[];
     if (Array.isArray(record.items)) return record.items as T[];
@@ -389,7 +422,7 @@ function pageResult<T>(
     };
   }
 
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return {
       items: [],
       page: fallbackPage,
@@ -405,7 +438,7 @@ function pageResult<T>(
   const numberValue = (...keys: string[]): number | undefined => {
     for (const key of keys) {
       const candidate = record[key];
-      if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      if (typeof candidate === "number" && Number.isFinite(candidate)) {
         return candidate;
       }
     }
@@ -413,22 +446,16 @@ function pageResult<T>(
   };
 
   const page =
-    numberValue('page', 'pageNumber', 'number', 'currentPage') ??
-    fallbackPage;
+    numberValue("page", "pageNumber", "number", "currentPage") ?? fallbackPage;
 
-  const size =
-    numberValue('size', 'pageSize', 'limit') ??
-    fallbackSize;
+  const size = numberValue("size", "pageSize", "limit") ?? fallbackSize;
 
   const totalElements =
-    numberValue('totalElements', 'totalCount', 'total') ??
-    items.length;
+    numberValue("totalElements", "totalCount", "total") ?? items.length;
 
   const totalPages =
-    numberValue('totalPages', 'pageCount') ??
-    (totalElements === 0
-      ? 0
-      : Math.ceil(totalElements / Math.max(size, 1)));
+    numberValue("totalPages", "pageCount") ??
+    (totalElements === 0 ? 0 : Math.ceil(totalElements / Math.max(size, 1)));
 
   return {
     items,
@@ -444,17 +471,17 @@ function delay() {
 }
 
 function formatDate(value?: string | null): string {
-  if (!value) return '-';
+  if (!value) return "-";
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }
 
@@ -467,49 +494,77 @@ function splitTargetAreas(value?: string | null): string[] {
     .filter(Boolean);
 }
 
-function backendUserStatusToUi(
-  status: BackendUser['status'],
-): UserStatus {
+function mapBackendCollectionArea(item: BackendCollectionArea): CollectionArea {
+  return {
+    id: item.id,
+    name: item.areaName,
+    sido: item.sido,
+    district: item.sigungu,
+    dongs: splitTargetAreas(item.targetAreaName),
+    targetAreaName: item.targetAreaName ?? "",
+    externalManagementNumber: item.externalManagementNumber ?? "",
+    wasteTypes: item.supportedWasteTypes,
+    sourceReferenceDate: item.sourceReferenceDate ?? undefined,
+    active: item.active,
+    createdAt: formatDate(item.createdAt),
+    updatedAt: formatDate(item.updatedAt),
+    sourceType: item.sourceType,
+  };
+}
+
+function collectionAreaGroupParams(
+  group: Pick<
+    CollectionAreaGroup,
+    "sido" | "district" | "targetAreaName" | "sourceType" | "active"
+  >,
+): URLSearchParams {
+  return new URLSearchParams({
+    sido: group.sido,
+    sigungu: group.district,
+    targetAreaName: group.targetAreaName,
+    sourceType: group.sourceType,
+    active: String(group.active),
+  });
+}
+
+function backendUserStatusToUi(status: BackendUser["status"]): UserStatus {
   return status;
 }
 
-function uiUserStatusToBackend(
-  status: UserStatus,
-): BackendUser['status'] {
+function uiUserStatusToBackend(status: UserStatus): BackendUser["status"] {
   return status;
 }
 
 function wasteTypeLabel(
-  wasteType: BackendCollectionAreaSchedule['wasteType'],
+  wasteType: BackendCollectionAreaSchedule["wasteType"],
 ): string {
-  if (wasteType === 'LIFE_WASTE') return '일반쓰레기';
-  if (wasteType === 'FOOD_WASTE') return '음식물류';
-  return '재활용품';
+  if (wasteType === "LIFE_WASTE") return "일반쓰레기";
+  if (wasteType === "FOOD_WASTE") return "음식물류";
+  return "재활용품";
 }
 
 function uiCategoryToWasteType(
   category: string,
-): BackendCollectionAreaSchedule['wasteType'] {
-  const normalized = category.replace(/\s/g, '');
+): BackendCollectionAreaSchedule["wasteType"] {
+  const normalized = category.replace(/\s/g, "");
 
-  if (normalized.includes('음식')) return 'FOOD_WASTE';
+  if (normalized.includes("음식")) return "FOOD_WASTE";
   if (
-    normalized.includes('일반') ||
-    normalized.includes('종량제') ||
-    normalized.includes('생활쓰레기')
+    normalized.includes("일반") ||
+    normalized.includes("종량제") ||
+    normalized.includes("생활쓰레기")
   ) {
-    return 'LIFE_WASTE';
+    return "LIFE_WASTE";
   }
 
-  return 'RECYCLABLE';
+  return "RECYCLABLE";
 }
 
 function scheduleTime(start?: string | null, end?: string | null): string {
-  if (!start && !end) return '시간 정보 없음';
+  if (!start && !end) return "시간 정보 없음";
   if (start && end) return `${start.slice(0, 5)} ~ ${end.slice(0, 5)}`;
-  return start?.slice(0, 5) ?? end?.slice(0, 5) ?? '시간 정보 없음';
+  return start?.slice(0, 5) ?? end?.slice(0, 5) ?? "시간 정보 없음";
 }
-
 
 function mapGeneralSchedule(
   item: BackendCollectionAreaSchedule,
@@ -521,53 +576,30 @@ function mapGeneralSchedule(
     wasteType: item.wasteType,
     sourceType: item.sourceType,
     day: item.emissionDays,
-    startTime:
-      item.startTime?.slice(0, 5) ?? undefined,
-    endTime:
-      item.endTime?.slice(0, 5) ?? undefined,
-    time: scheduleTime(
-      item.startTime,
-      item.endTime,
-    ),
-    note: [
-      item.emissionMethod,
-      item.emissionPlace,
-      item.uncollectedDay,
-    ]
+    startTime: item.startTime?.slice(0, 5) ?? undefined,
+    endTime: item.endTime?.slice(0, 5) ?? undefined,
+    time: scheduleTime(item.startTime, item.endTime),
+    note: [item.emissionMethod, item.emissionPlace, item.uncollectedDay]
       .filter(Boolean)
-      .join(' · '),
+      .join(" · "),
   };
 }
-
 
 function mapAreaScheduleCoverage(
   item: BackendAreaScheduleCoverage,
 ): AreaScheduleCoverage {
   return {
-    collectionAreaId:
-      item.collectionAreaId,
-    collectionAreaName:
-      item.collectionAreaName,
-    areaSourceType:
-      item.areaSourceType,
-    externalManagementNumber:
-      item.externalManagementNumber ??
-      undefined,
+    collectionAreaId: item.collectionAreaId,
+    collectionAreaName: item.collectionAreaName,
+    areaSourceType: item.areaSourceType,
+    externalManagementNumber: item.externalManagementNumber ?? undefined,
     sido: item.sido,
-    district:
-      item.sigungu,
-    targetAreaName:
-      item.targetAreaName ??
-      undefined,
+    district: item.sigungu,
+    targetAreaName: item.targetAreaName ?? undefined,
     active: item.active,
-    supportedWasteTypes:
-      item.supportedWasteTypes,
-    schedules:
-      item.schedules.map(
-        mapGeneralSchedule,
-      ),
-    missingWasteTypes:
-      item.missingWasteTypes,
+    supportedWasteTypes: item.supportedWasteTypes,
+    schedules: item.schedules.map(mapGeneralSchedule),
+    missingWasteTypes: item.missingWasteTypes,
   };
 }
 
@@ -581,7 +613,7 @@ function parseTimeRange(value: string): {
   }
 
   if (matches.length !== 2) {
-    throw new Error('시간은 예: 18:00 ~ 21:00 형식으로 입력해주세요.');
+    throw new Error("시간은 예: 18:00 ~ 21:00 형식으로 입력해주세요.");
   }
 
   return {
@@ -592,37 +624,37 @@ function parseTimeRange(value: string): {
 
 function notificationTargetLabel(targetType: string): string {
   const labels: Record<string, string> = {
-    ALL_ACTIVE_USERS: '전체 사용자',
-    NOTIFICATION_ENABLED_USERS: '알림 수신 동의 사용자',
-    MANAGED_COMPLEX_USERS: '공동주택 사용자',
-    GENERAL_HOUSING_USERS: '일반주택 사용자',
+    ALL_ACTIVE_USERS: "전체 사용자",
+    NOTIFICATION_ENABLED_USERS: "알림 수신 동의 사용자",
+    MANAGED_COMPLEX_USERS: "공동주택 사용자",
+    GENERAL_HOUSING_USERS: "일반주택 사용자",
   };
 
   return labels[targetType] ?? targetType;
 }
 
 function notificationTargetValue(target: string): string {
-  const normalized = target.replace(/\s/g, '');
+  const normalized = target.replace(/\s/g, "");
 
-  if (normalized === '전체사용자') return 'ALL_ACTIVE_USERS';
-  if (normalized.includes('알림수신')) return 'NOTIFICATION_ENABLED_USERS';
-  if (normalized.includes('공동주택') || normalized.includes('아파트')) {
-    return 'MANAGED_COMPLEX_USERS';
+  if (normalized === "전체사용자") return "ALL_ACTIVE_USERS";
+  if (normalized.includes("알림수신")) return "NOTIFICATION_ENABLED_USERS";
+  if (normalized.includes("공동주택") || normalized.includes("아파트")) {
+    return "MANAGED_COMPLEX_USERS";
   }
-  if (normalized.includes('일반주택')) return 'GENERAL_HOUSING_USERS';
+  if (normalized.includes("일반주택")) return "GENERAL_HOUSING_USERS";
 
   throw new Error(
-    '알림 대상은 전체 사용자, 알림 수신 동의 사용자, 공동주택 사용자, 일반주택 사용자 중 하나를 입력해주세요.',
+    "알림 대상은 전체 사용자, 알림 수신 동의 사용자, 공동주택 사용자, 일반주택 사용자 중 하나를 입력해주세요.",
   );
 }
 
 const AI_SUPPORTED_ITEM_NAMES = new Set([
-  '종이박스',
-  '페트병',
-  '플라스틱 용기',
-  '캔',
-  '유리병',
-  '스티로폼',
+  "종이박스",
+  "페트병",
+  "플라스틱 용기",
+  "캔",
+  "유리병",
+  "스티로폼",
 ]);
 
 let users = [...initialUsers];
@@ -655,7 +687,9 @@ async function findWasteCategory(name: string): Promise<BackendWasteCategory> {
 
   const fuzzy = categories.find((category) => {
     const categoryName = category.name.trim().toLowerCase();
-    return categoryName.includes(normalized) || normalized.includes(categoryName);
+    return (
+      categoryName.includes(normalized) || normalized.includes(categoryName)
+    );
   });
   if (fuzzy) return fuzzy;
 
@@ -667,11 +701,31 @@ async function findWasteCategory(name: string): Promise<BackendWasteCategory> {
 async function findCollectionAreaByName(
   name: string,
 ): Promise<BackendCollectionArea> {
+  const keyword = name.trim();
   const data = await request<unknown>(
-    `${ENDPOINTS.collectionAreas}?keyword=${encodeURIComponent(name)}&size=50`,
+    `${ENDPOINTS.collectionAreas}?keyword=${encodeURIComponent(keyword)}&size=50`,
   );
-  const candidates = pageItems<BackendCollectionArea>(data);
-  const normalized = name.trim().toLowerCase();
+
+  const groups = pageResult<BackendCollectionAreaGroup>(data, 0, 50).items;
+
+  const details = await Promise.all(
+    groups.map((group) => {
+      const params = collectionAreaGroupParams({
+        sido: group.sido,
+        district: group.sigungu,
+        targetAreaName: group.targetAreaName,
+        sourceType: group.sourceType,
+        active: group.active,
+      });
+
+      return request<BackendCollectionAreaGroupDetail>(
+        `${ENDPOINTS.collectionAreas}/groups/detail?${params.toString()}`,
+      );
+    }),
+  );
+
+  const candidates = details.flatMap((detail) => detail.originals);
+  const normalized = keyword.toLowerCase();
 
   const exact = candidates.find(
     (area) => area.areaName.trim().toLowerCase() === normalized,
@@ -692,25 +746,25 @@ export const authApi = {
   async login(email: string, password: string) {
     if (CONFIG.useMocks) {
       await delay();
-      if (email !== 'admin@smartrecycle.com' || password !== 'Admin1234!') {
-        throw new Error('관리자 이메일 또는 비밀번호를 확인해주세요.');
+      if (email !== "admin@smartrecycle.com" || password !== "Admin1234!") {
+        throw new Error("관리자 이메일 또는 비밀번호를 확인해주세요.");
       }
 
-      const session = { email, role: 'ADMIN' };
-      localStorage.setItem(ACCESS, 'mock-access-token');
-      localStorage.setItem(REFRESH, 'mock-refresh-token');
+      const session = { email, role: "ADMIN" };
+      localStorage.setItem(ACCESS, "mock-access-token");
+      localStorage.setItem(REFRESH, "mock-refresh-token");
       localStorage.setItem(SESSION, JSON.stringify(session));
       return session;
     }
 
     const tokens = await requestWithoutAuth<BackendTokenResponse>(
       ENDPOINTS.login,
-      'POST',
+      "POST",
       { email, password },
     );
 
     if (!tokens?.accessToken || !tokens?.refreshToken) {
-      throw new Error('로그인 토큰을 확인하지 못했습니다.');
+      throw new Error("로그인 토큰을 확인하지 못했습니다.");
     }
 
     localStorage.setItem(ACCESS, tokens.accessToken);
@@ -724,13 +778,13 @@ export const authApi = {
       clearAuth();
 
       if (error instanceof HttpError && error.status === 403) {
-        throw new Error('관리자 권한이 있는 계정만 로그인할 수 있습니다.');
+        throw new Error("관리자 권한이 있는 계정만 로그인할 수 있습니다.");
       }
 
       throw error;
     }
 
-    const session = { email, role: 'ADMIN' };
+    const session = { email, role: "ADMIN" };
     localStorage.setItem(SESSION, JSON.stringify(session));
     return session;
   },
@@ -747,11 +801,16 @@ export const adminApi = {
       return {
         ...initialDashboard,
         users: users.length,
-        activeUsers: users.filter((item) => item.status === 'ACTIVE').length,
-        pendingResidences: residences.filter((item) => item.approval === 'PENDING').length,
+        activeUsers: users.filter((item) => item.status === "ACTIVE").length,
+        pendingResidences: residences.filter(
+          (item) => item.approval === "PENDING",
+        ).length,
         wasteItems: wasteItems.length,
-        pendingAi: corrections.filter((item) => item.status === 'PENDING').length,
-        todayNotifications: notifications.filter((item) => item.status === 'SENT').length,
+        pendingAi: corrections.filter((item) => item.status === "PENDING")
+          .length,
+        todayNotifications: notifications.filter(
+          (item) => item.status === "SENT",
+        ).length,
       };
     }
 
@@ -772,7 +831,7 @@ export const adminApi = {
     page?: number;
     size?: number;
   }): Promise<PageResult<User>> {
-    const keyword = options?.keyword?.trim() ?? '';
+    const keyword = options?.keyword?.trim() ?? "";
     const page = Math.max(options?.page ?? 0, 0);
     const size = Math.max(options?.size ?? 20, 1);
 
@@ -782,8 +841,8 @@ export const adminApi = {
       name: item.name,
       role: item.role,
       status: backendUserStatusToUi(item.status),
-      residence: item.residenceName ?? '미설정',
-      address: item.address ?? '-',
+      residence: item.residenceName ?? "미설정",
+      address: item.address ?? "-",
       createdAt: formatDate(item.createdAt),
     });
 
@@ -794,12 +853,7 @@ export const adminApi = {
       const filtered = users.filter(
         (item) =>
           !normalized ||
-          [
-            item.email,
-            item.name,
-            item.residence,
-            item.address,
-          ].some((value) =>
+          [item.email, item.name, item.residence, item.address].some((value) =>
             value.toLowerCase().includes(normalized),
           ),
       );
@@ -813,9 +867,7 @@ export const adminApi = {
         size,
         totalElements: filtered.length,
         totalPages:
-          filtered.length === 0
-            ? 0
-            : Math.ceil(filtered.length / size),
+          filtered.length === 0 ? 0 : Math.ceil(filtered.length / size),
       };
     }
 
@@ -823,18 +875,13 @@ export const adminApi = {
       keyword,
       page: String(page),
       size: String(size),
-      sort: 'createdAt,desc',
     });
 
     const data = await request<unknown>(
       `${ENDPOINTS.users}?${params.toString()}`,
     );
 
-    const backendPage = pageResult<BackendUser>(
-      data,
-      page,
-      size,
-    );
+    const backendPage = pageResult<BackendUser>(data, page, size);
 
     return {
       ...backendPage,
@@ -845,23 +892,95 @@ export const adminApi = {
   async setUserStatus(id: number, status: UserStatus) {
     if (CONFIG.useMocks) {
       await delay();
-      users = users.map((item) => (item.id === id ? { ...item, status } : item));
+      users = users.map((item) =>
+        item.id === id ? { ...item, status } : item,
+      );
       return;
     }
 
-    await request(ENDPOINTS.userStatus(id), 'PATCH', {
+    await request(ENDPOINTS.userStatus(id), "PATCH", {
       status: uiUserStatusToBackend(status),
     });
   },
 
-  async setUserRole(id: number, role: 'USER' | 'ADMIN') {
+  async setUserRole(id: number, role: "USER" | "ADMIN") {
     if (CONFIG.useMocks) {
       await delay();
       users = users.map((item) => (item.id === id ? { ...item, role } : item));
       return;
     }
 
-    await request(ENDPOINTS.userRole(id), 'PATCH', { role });
+    await request(ENDPOINTS.userRole(id), "PATCH", { role });
+  },
+
+  async residencePage(options?: {
+    keyword?: string;
+    status?: ReviewStatus;
+    page?: number;
+    size?: number;
+  }): Promise<PageResult<Residence>> {
+    const keyword = options?.keyword?.trim() ?? "";
+    const status = options?.status ?? "PENDING";
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
+
+    const mapApartment = (item: BackendApartment): Residence => ({
+      id: item.id,
+      name: item.name,
+      type: "공동주택",
+      address: item.roadAddress || item.jibunAddress || "-",
+      buildingNo: item.buildingManagementNumber ?? undefined,
+      area: undefined,
+      approval: item.status,
+    });
+
+    if (CONFIG.useMocks) {
+      await delay();
+
+      const normalized = keyword.toLowerCase();
+      const filtered = residences.filter((item) => {
+        const matchesStatus = item.approval === status;
+        const matchesKeyword =
+          !normalized ||
+          [item.name, item.address, item.buildingNo ?? ""]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalized);
+
+        return matchesStatus && matchesKeyword;
+      });
+
+      const start = page * size;
+      const items = filtered.slice(start, start + size);
+
+      return {
+        items,
+        page,
+        size,
+        totalElements: filtered.length,
+        totalPages:
+          filtered.length === 0 ? 0 : Math.ceil(filtered.length / size),
+      };
+    }
+
+    const params = new URLSearchParams({
+      keyword,
+      status,
+      page: String(page),
+      size: String(size),
+      sort: "createdAt,desc",
+    });
+
+    const data = await request<unknown>(
+      `${ENDPOINTS.apartments}?${params.toString()}`,
+    );
+
+    const backendPage = pageResult<BackendApartment>(data, page, size);
+
+    return {
+      ...backendPage,
+      items: backendPage.items.map(mapApartment),
+    };
   },
 
   async residences(): Promise<Residence[]> {
@@ -870,7 +989,7 @@ export const adminApi = {
       return [...residences];
     }
 
-    const statuses: ReviewStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
+    const statuses: ReviewStatus[] = ["PENDING", "APPROVED", "REJECTED"];
 
     const pages = await Promise.all(
       statuses.map((status) =>
@@ -883,45 +1002,233 @@ export const adminApi = {
       .map((item) => ({
         id: item.id,
         name: item.name,
-        type: '공동주택',
-        address: item.roadAddress || item.jibunAddress || '-',
+        type: "공동주택",
+        address: item.roadAddress || item.jibunAddress || "-",
         buildingNo: item.buildingManagementNumber ?? undefined,
         area: undefined,
         approval: item.status,
       }));
   },
 
-  async reviewResidence(id: number, approved: boolean) {
+  async reviewResidence(id: number, approved: boolean, rejectionReason = "") {
     if (CONFIG.useMocks) {
       await delay();
       residences = residences.map((item) =>
         item.id === id
-          ? { ...item, approval: approved ? 'APPROVED' : 'REJECTED' }
+          ? { ...item, approval: approved ? "APPROVED" : "REJECTED" }
           : item,
       );
       return;
     }
 
     if (approved) {
-      await request(ENDPOINTS.approveApartment(id), 'PATCH');
+      await request(ENDPOINTS.approveApartment(id), "PATCH");
       return;
     }
 
-    await request(ENDPOINTS.rejectApartment(id), 'PATCH', {
-      rejectionReason: '관리자 검수 결과 등록 요청을 거절했습니다.',
+    await request(ENDPOINTS.rejectApartment(id), "PATCH", {
+      rejectionReason:
+        rejectionReason.trim() || "관리자 검수 결과 등록 요청을 거절했습니다.",
     });
   },
 
+  async areaGroups(options?: {
+    keyword?: string;
+    sourceType?: "MOIS_HOUSEHOLD_WASTE" | "MANUAL" | "";
+    active?: "" | "true" | "false";
+    page?: number;
+    size?: number;
+  }): Promise<PageResult<CollectionAreaGroup>> {
+    const keyword = options?.keyword?.trim() ?? "";
+    const sourceType = options?.sourceType ?? "";
+    const active = options?.active ?? "";
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
+
+    if (CONFIG.useMocks) {
+      await delay();
+
+      const displayTargetArea = (area: CollectionArea) =>
+        area.targetAreaName?.trim() ||
+        (area.dongs.length > 0 ? area.dongs.join(", ") : area.name);
+
+      let filtered = [...areas];
+
+      if (keyword) {
+        const normalized = keyword.toLowerCase();
+        filtered = filtered.filter((item) =>
+          [
+            item.name,
+            item.sido ?? "",
+            item.district,
+            displayTargetArea(item),
+            item.externalManagementNumber ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalized),
+        );
+      }
+
+      if (sourceType) {
+        filtered = filtered.filter((item) => item.sourceType === sourceType);
+      }
+
+      if (active) {
+        filtered = filtered.filter(
+          (item) => item.active === (active === "true"),
+        );
+      }
+
+      const grouped = new Map<string, CollectionAreaGroup>();
+
+      filtered.forEach((item) => {
+        const itemSourceType = item.sourceType ?? "MOIS_HOUSEHOLD_WASTE";
+        const targetAreaName = displayTargetArea(item);
+        const key = [
+          item.sido ?? "",
+          item.district,
+          targetAreaName,
+          itemSourceType,
+          String(item.active),
+        ].join("||");
+
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.originalCount += 1;
+          return;
+        }
+
+        grouped.set(key, {
+          sido: item.sido ?? "",
+          district: item.district,
+          targetAreaName,
+          sourceType: itemSourceType,
+          active: item.active,
+          originalCount: 1,
+        });
+      });
+
+      const groupedItems = [...grouped.values()].sort(
+        (a, b) =>
+          a.sido.localeCompare(b.sido, "ko") ||
+          a.district.localeCompare(b.district, "ko") ||
+          a.targetAreaName.localeCompare(b.targetAreaName, "ko") ||
+          a.sourceType.localeCompare(b.sourceType) ||
+          Number(b.active) - Number(a.active),
+      );
+
+      const start = page * size;
+      const items = groupedItems.slice(start, start + size);
+
+      return {
+        items,
+        page,
+        size,
+        totalElements: groupedItems.length,
+        totalPages:
+          groupedItems.length === 0 ? 0 : Math.ceil(groupedItems.length / size),
+      };
+    }
+
+    const params = new URLSearchParams({
+      keyword,
+      page: String(page),
+      size: String(size),
+    });
+
+    if (sourceType) {
+      params.set("sourceType", sourceType);
+    }
+
+    if (active) {
+      params.set("active", active);
+    }
+
+    const data = await request<unknown>(
+      `${ENDPOINTS.collectionAreas}?${params.toString()}`,
+    );
+
+    const backendPage = pageResult<BackendCollectionAreaGroup>(
+      data,
+      page,
+      size,
+    );
+
+    return {
+      ...backendPage,
+      items: backendPage.items.map((item) => ({
+        sido: item.sido,
+        district: item.sigungu,
+        targetAreaName: item.targetAreaName,
+        sourceType: item.sourceType,
+        active: item.active,
+        originalCount: item.originalCount,
+      })),
+    };
+  },
+
+  async areaGroupDetail(
+    group: CollectionAreaGroup,
+  ): Promise<CollectionAreaGroupDetail> {
+    if (CONFIG.useMocks) {
+      await delay();
+
+      const displayTargetArea = (area: CollectionArea) =>
+        area.targetAreaName?.trim() ||
+        (area.dongs.length > 0 ? area.dongs.join(", ") : area.name);
+
+      const originals = areas.filter((item) => {
+        const itemSourceType = item.sourceType ?? "MOIS_HOUSEHOLD_WASTE";
+
+        return (
+          (item.sido ?? "") === group.sido &&
+          item.district === group.district &&
+          displayTargetArea(item) === group.targetAreaName &&
+          itemSourceType === group.sourceType &&
+          item.active === group.active
+        );
+      });
+
+      return {
+        ...group,
+        originalCount: originals.length,
+        originals,
+      };
+    }
+
+    const params = collectionAreaGroupParams(group);
+    const data = await request<BackendCollectionAreaGroupDetail>(
+      `${ENDPOINTS.collectionAreas}/groups/detail?${params.toString()}`,
+    );
+
+    data.originals.forEach((item) => areaMeta.set(item.id, item));
+
+    return {
+      sido: data.sido,
+      district: data.sigungu,
+      targetAreaName: data.targetAreaName,
+      sourceType: data.sourceType,
+      active: data.active,
+      originalCount: data.originalCount,
+      originals: data.originals.map(mapBackendCollectionArea),
+    };
+  },
+
+  /**
+   * 기존 Mock/레거시 코드에서 실제 CollectionArea 배열이 필요한 경우를 위한 래퍼.
+   * 관리자 수거구역 목록 화면에서는 areaGroups()를 사용합니다.
+   */
   async areas(options?: {
     keyword?: string;
-    sourceType?: 'MOIS_HOUSEHOLD_WASTE' | 'MANUAL' | '';
-    active?: '' | 'true' | 'false';
+    sourceType?: "MOIS_HOUSEHOLD_WASTE" | "MANUAL" | "";
+    active?: "" | "true" | "false";
     page?: number;
     size?: number;
   }): Promise<PageResult<CollectionArea>> {
-    const keyword = options?.keyword?.trim() ?? '';
-    const sourceType = options?.sourceType ?? '';
-    const active = options?.active ?? '';
+    const keyword = options?.keyword?.trim() ?? "";
+    const sourceType = options?.sourceType ?? "";
+    const active = options?.active ?? "";
     const page = Math.max(options?.page ?? 0, 0);
     const size = Math.max(options?.size ?? 20, 1);
 
@@ -935,26 +1242,24 @@ export const adminApi = {
         filtered = filtered.filter((item) =>
           [
             item.name,
-            item.sido ?? '',
+            item.sido ?? "",
             item.district,
-            item.dongs.join(' '),
-            item.externalManagementNumber ?? '',
+            item.dongs.join(" "),
+            item.externalManagementNumber ?? "",
           ]
-            .join(' ')
+            .join(" ")
             .toLowerCase()
             .includes(normalized),
         );
       }
 
       if (sourceType) {
-        filtered = filtered.filter(
-          (item) => item.sourceType === sourceType,
-        );
+        filtered = filtered.filter((item) => item.sourceType === sourceType);
       }
 
       if (active) {
         filtered = filtered.filter(
-          (item) => item.active === (active === 'true'),
+          (item) => item.active === (active === "true"),
         );
       }
 
@@ -967,66 +1272,48 @@ export const adminApi = {
         size,
         totalElements: filtered.length,
         totalPages:
-          filtered.length === 0
-            ? 0
-            : Math.ceil(filtered.length / size),
+          filtered.length === 0 ? 0 : Math.ceil(filtered.length / size),
       };
     }
 
-    const params = new URLSearchParams({
+    areaMeta.clear();
+
+    const groupPage = await adminApi.areaGroups({
       keyword,
-      page: String(page),
-      size: String(size),
-      sort: 'updatedAt,desc',
-    });
-
-    if (sourceType) {
-      params.set('sourceType', sourceType);
-    }
-
-    if (active) {
-      params.set('active', active);
-    }
-
-    const data = await request<unknown>(
-      `${ENDPOINTS.collectionAreas}?${params.toString()}`,
-    );
-
-    const backendPage = pageResult<BackendCollectionArea>(
-      data,
+      sourceType,
+      active,
       page,
       size,
+    });
+
+    const details = await Promise.all(
+      groupPage.items.map((group) => adminApi.areaGroupDetail(group)),
     );
 
-    areaMeta.clear();
-    backendPage.items.forEach((item) => areaMeta.set(item.id, item));
+    const items = details.flatMap((detail) => detail.originals);
 
     return {
-      ...backendPage,
-      items: backendPage.items.map((item) => ({
-        id: item.id,
-        name: item.areaName,
-        sido: item.sido,
-        district: item.sigungu,
-        dongs: splitTargetAreas(item.targetAreaName),
-        targetAreaName: item.targetAreaName ?? '',
-        externalManagementNumber:
-          item.externalManagementNumber ?? '',
-        wasteTypes: item.supportedWasteTypes,
-        active: item.active,
-        updatedAt: formatDate(item.updatedAt),
-        sourceType: item.sourceType,
-      })),
+      items,
+      page: groupPage.page,
+      size: groupPage.size,
+      totalElements: items.length,
+      totalPages: groupPage.totalPages,
     };
   },
 
-  async saveArea(item: Partial<CollectionArea> & { name: string; district: string }) {
+  async saveArea(
+    item: Partial<CollectionArea> & { name: string; district: string },
+  ) {
     if (CONFIG.useMocks) {
       await delay();
       if (item.id) {
         areas = areas.map((area) =>
           area.id === item.id
-            ? { ...area, ...item, dongs: item.dongs ?? area.dongs } as CollectionArea
+            ? ({
+                ...area,
+                ...item,
+                dongs: item.dongs ?? area.dongs,
+              } as CollectionArea)
             : area,
         );
       } else {
@@ -1035,28 +1322,32 @@ export const adminApi = {
           {
             id: Date.now(),
             name: item.name,
+            sido: "부산광역시",
             district: item.district,
             dongs: item.dongs ?? [],
+            targetAreaName: (item.dongs ?? []).join(", "),
+            wasteTypes: ["LIFE_WASTE", "FOOD_WASTE", "RECYCLABLE"],
             active: item.active ?? true,
-            updatedAt: new Date().toLocaleString('ko-KR'),
+            updatedAt: new Date().toLocaleString("ko-KR"),
+            sourceType: "MANUAL",
           },
         ];
       }
       return;
     }
 
-    const targetAreaName = (item.dongs ?? []).join(', ');
+    const targetAreaName = (item.dongs ?? []).join(", ");
 
     if (item.id) {
       const existing = areaMeta.get(item.id);
       if (!existing) {
-        throw new Error('수정할 수거구역 원본 정보를 다시 불러와주세요.');
+        throw new Error("수정할 수거구역 원본 정보를 다시 불러와주세요.");
       }
-      if (existing.sourceType !== 'MANUAL') {
-        throw new Error('공공데이터 수거구역은 직접 수정할 수 없습니다.');
+      if (existing.sourceType !== "MANUAL") {
+        throw new Error("공공데이터 수거구역은 직접 수정할 수 없습니다.");
       }
 
-      await request(ENDPOINTS.collectionArea(item.id), 'PUT', {
+      await request(ENDPOINTS.collectionArea(item.id), "PUT", {
         sido: existing.sido,
         sigungu: item.district,
         areaName: item.name,
@@ -1067,12 +1358,12 @@ export const adminApi = {
       return;
     }
 
-    await request(ENDPOINTS.collectionAreas, 'POST', {
-      sido: '부산광역시',
+    await request(ENDPOINTS.collectionAreas, "POST", {
+      sido: "부산광역시",
       sigungu: item.district,
       areaName: item.name,
       targetAreaName: targetAreaName || null,
-      supportedWasteTypes: ['LIFE_WASTE', 'FOOD_WASTE', 'RECYCLABLE'],
+      supportedWasteTypes: ["LIFE_WASTE", "FOOD_WASTE", "RECYCLABLE"],
     });
   },
 
@@ -1089,236 +1380,139 @@ export const adminApi = {
       active
         ? ENDPOINTS.collectionAreaActivate(id)
         : ENDPOINTS.collectionAreaDeactivate(id),
-      'PATCH',
+      "PATCH",
     );
   },
 
   async generalScheduleCoverage(options?: {
     keyword?: string;
-    sourceType?:
-      | ''
-      | 'MOIS_HOUSEHOLD_WASTE'
-      | 'MANUAL';
-    active?: '' | 'true' | 'false';
+    sourceType?: "" | "MOIS_HOUSEHOLD_WASTE" | "MANUAL";
+    active?: "" | "true" | "false";
     page?: number;
     size?: number;
   }): Promise<PageResult<AreaScheduleGroupCoverage>> {
-    const keyword =
-      options?.keyword?.trim() ?? '';
-    const sourceType =
-      options?.sourceType ?? '';
-    const active =
-      options?.active ?? '';
-    const page =
-      Math.max(options?.page ?? 0, 0);
-    const size =
-      Math.max(options?.size ?? 20, 1);
+    const keyword = options?.keyword?.trim() ?? "";
+    const sourceType = options?.sourceType ?? "";
+    const active = options?.active ?? "";
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
 
     if (CONFIG.useMocks) {
       await delay();
 
-      const areaPage =
-        await adminApi.areas({
-          keyword,
-          sourceType,
-          active,
-          page,
-          size,
-        });
+      const areaPage = await adminApi.areas({
+        keyword,
+        sourceType,
+        active,
+        page,
+        size,
+      });
 
       return {
         ...areaPage,
-        items: areaPage.items.map(
-          (area) => {
-            const areaSchedules =
-              schedules
-                .filter(
-                  (schedule) =>
-                    schedule.area ===
-                    area.name,
-                )
-                .map<GeneralHousingSchedule>(
-                  (schedule) => ({
-                    id: schedule.id,
-                    collectionAreaId:
-                      area.id,
-                    collectionAreaName:
-                      area.name,
-                    wasteType:
-                      uiCategoryToWasteType(
-                        schedule.category,
-                      ),
-                    sourceType:
-                      'ADMIN_APPROVED_REPORT',
-                    day: schedule.day,
-                    time: schedule.time,
-                    note: schedule.note,
-                  }),
-                );
+        items: areaPage.items.map((area) => {
+          const areaSchedules = schedules
+            .filter((schedule) => schedule.area === area.name)
+            .map<GeneralHousingSchedule>((schedule) => ({
+              id: schedule.id,
+              collectionAreaId: area.id,
+              collectionAreaName: area.name,
+              wasteType: uiCategoryToWasteType(schedule.category),
+              sourceType: "ADMIN_APPROVED_REPORT",
+              day: schedule.day,
+              time: schedule.time,
+              note: schedule.note,
+            }));
 
-            const registered =
-              new Set(
-                areaSchedules.map(
-                  (schedule) =>
-                    schedule.wasteType,
-                ),
-              );
+          const registered = new Set(
+            areaSchedules.map((schedule) => schedule.wasteType),
+          );
 
-            const supportedWasteTypes =
-              area.wasteTypes ?? [];
+          const supportedWasteTypes = area.wasteTypes ?? [];
 
-            const areaCoverage: AreaScheduleCoverage = {
-              collectionAreaId:
-                area.id,
-              collectionAreaName:
-                area.name,
-              areaSourceType:
-                area.sourceType ??
-                'MOIS_HOUSEHOLD_WASTE',
-              externalManagementNumber:
-                area.externalManagementNumber,
-              sido: area.sido ?? '',
-              district:
-                area.district,
-              targetAreaName:
-                area.targetAreaName ??
-                area.dongs.join(', '),
-              active: area.active,
-              supportedWasteTypes,
-              schedules:
-                areaSchedules,
-              missingWasteTypes:
-                supportedWasteTypes.filter(
-                  (wasteType) =>
-                    !registered.has(
-                      wasteType,
-                    ),
-                ),
-            };
+          const areaCoverage: AreaScheduleCoverage = {
+            collectionAreaId: area.id,
+            collectionAreaName: area.name,
+            areaSourceType: area.sourceType ?? "MOIS_HOUSEHOLD_WASTE",
+            externalManagementNumber: area.externalManagementNumber,
+            sido: area.sido ?? "",
+            district: area.district,
+            targetAreaName: area.targetAreaName ?? area.dongs.join(", "),
+            active: area.active,
+            supportedWasteTypes,
+            schedules: areaSchedules,
+            missingWasteTypes: supportedWasteTypes.filter(
+              (wasteType) => !registered.has(wasteType),
+            ),
+          };
 
-            return {
-              representativeCollectionAreaId:
-                area.id,
-              collectionAreaName:
-                area.name,
-              sido:
-                area.sido ?? '',
-              district:
-                area.district,
-              targetAreaName:
-                area.targetAreaName ??
-                area.dongs.join(', '),
-              areaSourceType:
-                area.sourceType ??
-                'MOIS_HOUSEHOLD_WASTE',
-              active:
-                area.active,
-              collectionAreaCount:
-                1,
-              allSchedulesRegistered:
-                areaCoverage
-                  .missingWasteTypes
-                  .length === 0,
-              supportedWasteTypes,
-              wasteTypeCoverage:
-                supportedWasteTypes.map(
-                  (wasteType) => {
-                    const isRegistered =
-                      registered.has(
-                        wasteType,
-                      );
+          return {
+            representativeCollectionAreaId: area.id,
+            collectionAreaName: area.name,
+            sido: area.sido ?? "",
+            district: area.district,
+            targetAreaName: area.targetAreaName ?? area.dongs.join(", "),
+            areaSourceType: area.sourceType ?? "MOIS_HOUSEHOLD_WASTE",
+            active: area.active,
+            collectionAreaCount: 1,
+            allSchedulesRegistered: areaCoverage.missingWasteTypes.length === 0,
+            supportedWasteTypes,
+            wasteTypeCoverage: supportedWasteTypes.map((wasteType) => {
+              const isRegistered = registered.has(wasteType);
 
-                    return {
-                      wasteType,
-                      supportedAreaCount:
-                        1,
-                      registeredAreaCount:
-                        isRegistered
-                          ? 1
-                          : 0,
-                      missingAreaCount:
-                        isRegistered
-                          ? 0
-                          : 1,
-                    };
-                  },
-                ),
-              areas: [
-                areaCoverage,
-              ],
-            };
-          },
-        ),
+              return {
+                wasteType,
+                supportedAreaCount: 1,
+                registeredAreaCount: isRegistered ? 1 : 0,
+                missingAreaCount: isRegistered ? 0 : 1,
+              };
+            }),
+            areas: [areaCoverage],
+          };
+        }),
       };
     }
 
-    const params =
-      new URLSearchParams({
-        keyword,
-        page: String(page),
-        size: String(size),
-      });
+    const params = new URLSearchParams({
+      keyword,
+      page: String(page),
+      size: String(size),
+    });
 
     if (sourceType) {
-      params.set(
-        'sourceType',
-        sourceType,
-      );
+      params.set("sourceType", sourceType);
     }
 
     if (active) {
-      params.set(
-        'active',
-        active,
-      );
+      params.set("active", active);
     }
 
-    const data =
-      await request<unknown>(
-        `${ENDPOINTS.collectionAreaSchedules}/coverage?${params.toString()}`,
-      );
+    const data = await request<unknown>(
+      `${ENDPOINTS.collectionAreaSchedules}/coverage?${params.toString()}`,
+    );
 
-    const backendPage =
-      pageResult<BackendAreaScheduleGroupCoverage>(
-        data,
-        page,
-        size,
-      );
+    const backendPage = pageResult<BackendAreaScheduleGroupCoverage>(
+      data,
+      page,
+      size,
+    );
 
     return {
       ...backendPage,
-      items:
-        backendPage.items.map(
-          (item) => ({
-            representativeCollectionAreaId:
-              item.representativeCollectionAreaId,
-            collectionAreaName:
-              item.collectionAreaName,
-            sido:
-              item.sido,
-            district:
-              item.sigungu,
-            targetAreaName:
-              item.targetAreaName ??
-              undefined,
-            areaSourceType:
-              item.areaSourceType,
-            active:
-              item.active,
-            collectionAreaCount:
-              item.collectionAreaCount,
-            allSchedulesRegistered:
-              item.allSchedulesRegistered,
-            supportedWasteTypes:
-              item.supportedWasteTypes,
-            wasteTypeCoverage:
-              item.wasteTypeCoverage,
-            areas:
-              item.areas.map(
-                mapAreaScheduleCoverage,
-              ),
-          }),
-        ),
+      items: backendPage.items.map((item) => ({
+        representativeCollectionAreaId: item.representativeCollectionAreaId,
+        collectionAreaName: item.collectionAreaName,
+        sido: item.sido,
+        district: item.sigungu,
+        targetAreaName: item.targetAreaName ?? undefined,
+        areaSourceType: item.areaSourceType,
+        active: item.active,
+        collectionAreaCount: item.collectionAreaCount,
+        allSchedulesRegistered: item.allSchedulesRegistered,
+        supportedWasteTypes: item.supportedWasteTypes,
+        wasteTypeCoverage: item.wasteTypeCoverage,
+        areas: item.areas.map(mapAreaScheduleCoverage),
+      })),
     };
   },
 
@@ -1336,104 +1530,55 @@ export const adminApi = {
     }
 
     const body = {
-      emissionDays:
-        input.emissionDays.trim(),
-      startTime:
-        input.startTime || null,
-      endTime:
-        input.endTime || null,
+      emissionDays: input.emissionDays.trim(),
+      startTime: input.startTime || null,
+      endTime: input.endTime || null,
     };
 
     if (input.id) {
-      await request(
-        ENDPOINTS.collectionAreaSchedule(
-          input.id,
-        ),
-        'PATCH',
-        body,
-      );
+      await request(ENDPOINTS.collectionAreaSchedule(input.id), "PATCH", body);
       return;
     }
 
-    await request(
-      ENDPOINTS.collectionAreaSchedules,
-      'POST',
-      {
-        collectionAreaId:
-          input.collectionAreaId,
-        wasteType:
-          input.wasteType,
-        ...body,
-      },
-    );
+    await request(ENDPOINTS.collectionAreaSchedules, "POST", {
+      collectionAreaId: input.collectionAreaId,
+      wasteType: input.wasteType,
+      ...body,
+    });
   },
 
-  async deleteGeneralSchedule(
-    id: number,
-  ) {
+  async deleteGeneralSchedule(id: number) {
     if (CONFIG.useMocks) {
       await delay();
       return;
     }
 
-    await request(
-      ENDPOINTS.collectionAreaSchedule(
-        id,
-      ),
-      'DELETE',
-    );
+    await request(ENDPOINTS.collectionAreaSchedule(id), "DELETE");
   },
 
-  async apartmentSchedules(
-    apartmentId: number,
-  ): Promise<ApartmentSchedule[]> {
+  async apartmentSchedules(apartmentId: number): Promise<ApartmentSchedule[]> {
     if (CONFIG.useMocks) {
       await delay();
       return [];
     }
 
-    const data =
-      await request<unknown>(
-        `${ENDPOINTS.apartmentSchedules}?apartmentId=${apartmentId}`,
-      );
-
-    return pageItems<
-      BackendApartmentSchedule
-    >(data).map(
-      (item) => ({
-        id: item.id,
-        apartmentId:
-          item.apartmentId,
-        apartmentName:
-          item.apartmentName,
-        wasteItemId:
-          item.wasteItem.id,
-        wasteItemName:
-          item.wasteItem.name,
-        dayOfWeek:
-          item.dayOfWeek,
-        startTime:
-          item.startTime?.slice(
-            0,
-            5,
-          ) ?? undefined,
-        endTime:
-          item.endTime?.slice(
-            0,
-            5,
-          ) ?? undefined,
-        alwaysAvailable:
-          item.alwaysAvailable,
-        createdAt:
-          formatDate(
-            item.createdAt,
-          ),
-        updatedAt:
-          formatDate(
-            item.updatedAt,
-          ),
-      }),
+    const data = await request<unknown>(
+      `${ENDPOINTS.apartmentSchedules}?apartmentId=${apartmentId}`,
     );
+
+    return pageItems<BackendApartmentSchedule>(data).map((item) => ({
+      id: item.id,
+      apartmentId: item.apartmentId,
+      apartmentName: item.apartmentName,
+      wasteItemId: item.wasteItem.id,
+      wasteItemName: item.wasteItem.name,
+      dayOfWeek: item.dayOfWeek,
+      startTime: item.startTime?.slice(0, 5) ?? undefined,
+      endTime: item.endTime?.slice(0, 5) ?? undefined,
+      alwaysAvailable: item.alwaysAvailable,
+      createdAt: formatDate(item.createdAt),
+      updatedAt: formatDate(item.updatedAt),
+    }));
   },
 
   async saveApartmentSchedule(input: {
@@ -1451,60 +1596,31 @@ export const adminApi = {
     }
 
     const body = {
-      dayOfWeek:
-        input.dayOfWeek,
-      startTime:
-        input.alwaysAvailable
-          ? null
-          : input.startTime ||
-            null,
-      endTime:
-        input.alwaysAvailable
-          ? null
-          : input.endTime ||
-            null,
-      alwaysAvailable:
-        input.alwaysAvailable,
+      dayOfWeek: input.dayOfWeek,
+      startTime: input.alwaysAvailable ? null : input.startTime || null,
+      endTime: input.alwaysAvailable ? null : input.endTime || null,
+      alwaysAvailable: input.alwaysAvailable,
     };
 
     if (input.id) {
-      await request(
-        ENDPOINTS.apartmentSchedule(
-          input.id,
-        ),
-        'PATCH',
-        body,
-      );
+      await request(ENDPOINTS.apartmentSchedule(input.id), "PATCH", body);
       return;
     }
 
-    await request(
-      ENDPOINTS.apartmentSchedules,
-      'POST',
-      {
-        apartmentId:
-          input.apartmentId,
-        wasteItemId:
-          input.wasteItemId,
-        ...body,
-      },
-    );
+    await request(ENDPOINTS.apartmentSchedules, "POST", {
+      apartmentId: input.apartmentId,
+      wasteItemId: input.wasteItemId,
+      ...body,
+    });
   },
 
-  async deleteApartmentSchedule(
-    id: number,
-  ) {
+  async deleteApartmentSchedule(id: number) {
     if (CONFIG.useMocks) {
       await delay();
       return;
     }
 
-    await request(
-      ENDPOINTS.apartmentSchedule(
-        id,
-      ),
-      'DELETE',
-    );
+    await request(ENDPOINTS.apartmentSchedule(id), "DELETE");
   },
 
   async schedules(): Promise<Schedule[]> {
@@ -1529,19 +1645,22 @@ export const adminApi = {
       time: scheduleTime(item.startTime, item.endTime),
       note: [item.emissionMethod, item.emissionPlace, item.uncollectedDay]
         .filter(Boolean)
-        .join(' · '),
+        .join(" · "),
       active: true,
     }));
   },
 
   async saveSchedule(
-    item: Partial<Schedule> & Pick<Schedule, 'area' | 'category' | 'day' | 'time'>,
+    item: Partial<Schedule> &
+      Pick<Schedule, "area" | "category" | "day" | "time">,
   ) {
     if (CONFIG.useMocks) {
       await delay();
       if (item.id) {
         schedules = schedules.map((schedule) =>
-          schedule.id === item.id ? { ...schedule, ...item } as Schedule : schedule,
+          schedule.id === item.id
+            ? ({ ...schedule, ...item } as Schedule)
+            : schedule,
         );
       } else {
         schedules = [
@@ -1552,7 +1671,7 @@ export const adminApi = {
             category: item.category,
             day: item.day,
             time: item.time,
-            note: item.note ?? '',
+            note: item.note ?? "",
             active: item.active ?? true,
           },
         ];
@@ -1564,10 +1683,10 @@ export const adminApi = {
 
     if (item.id) {
       if (!scheduleMeta.has(item.id)) {
-        throw new Error('수정할 일정 원본 정보를 다시 불러와주세요.');
+        throw new Error("수정할 일정 원본 정보를 다시 불러와주세요.");
       }
 
-      await request(ENDPOINTS.collectionAreaSchedule(item.id), 'PATCH', {
+      await request(ENDPOINTS.collectionAreaSchedule(item.id), "PATCH", {
         emissionDays: item.day,
         startTime,
         endTime,
@@ -1577,7 +1696,7 @@ export const adminApi = {
 
     const area = await findCollectionAreaByName(item.area);
 
-    await request(ENDPOINTS.collectionAreaSchedules, 'POST', {
+    await request(ENDPOINTS.collectionAreaSchedules, "POST", {
       collectionAreaId: area.id,
       wasteType: uiCategoryToWasteType(item.category),
       emissionDays: item.day,
@@ -1586,48 +1705,112 @@ export const adminApi = {
     });
   },
 
-  async wasteItems(keyword = ''): Promise<WasteItem[]> {
-    if (CONFIG.useMocks) {
-      await delay();
-      const q = keyword.toLowerCase().trim();
-      return wasteItems.filter(
-        (item) =>
-          !q ||
-          [item.name, item.category, ...item.aliases].some((value) =>
-            value.toLowerCase().includes(q),
-          ),
-      );
-    }
+  async wasteItemPage(options?: {
+    keyword?: string;
+    page?: number;
+    size?: number;
+  }): Promise<PageResult<WasteItem>> {
+    const keyword = options?.keyword?.trim() ?? "";
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
 
-    const data = await request<unknown>(
-      `${ENDPOINTS.wasteItems}?keyword=${encodeURIComponent(keyword)}&size=200`,
-    );
-    const backendItems = pageItems<BackendWasteItem>(data);
-
-    backendItems.forEach((item) => wasteItemMeta.set(item.id, item));
-
-    return backendItems.map((item) => ({
+    const mapWasteItem = (item: BackendWasteItem): WasteItem => ({
       id: item.id,
       name: item.name,
       category: item.category.name,
-      aliases: (item.searchKeywords ?? '')
-        .split(',')
+      aliases: (item.searchKeywords ?? "")
+        .split(",")
         .map((value) => value.trim())
         .filter(Boolean),
       aiSupported: AI_SUPPORTED_ITEM_NAMES.has(item.name),
       active: item.active,
-    }));
+    });
+
+    if (CONFIG.useMocks) {
+      await delay();
+      const normalized = keyword.toLowerCase();
+      const filtered = wasteItems.filter(
+        (item) =>
+          !normalized ||
+          [item.name, item.category, ...item.aliases].some((value) =>
+            value.toLowerCase().includes(normalized),
+          ),
+      );
+
+      const start = page * size;
+      const items = filtered.slice(start, start + size);
+
+      return {
+        items,
+        page,
+        size,
+        totalElements: filtered.length,
+        totalPages:
+          filtered.length === 0 ? 0 : Math.ceil(filtered.length / size),
+      };
+    }
+
+    const params = new URLSearchParams({
+      keyword,
+      page: String(page),
+      size: String(size),
+    });
+
+    const data = await request<unknown>(
+      `${ENDPOINTS.wasteItems}?${params.toString()}`,
+    );
+
+    const backendPage = pageResult<BackendWasteItem>(data, page, size);
+
+    backendPage.items.forEach((item) => wasteItemMeta.set(item.id, item));
+
+    return {
+      ...backendPage,
+      items: backendPage.items.map(mapWasteItem),
+    };
+  },
+
+  async wasteItems(keyword = ""): Promise<WasteItem[]> {
+    const pageSize = 200;
+    const first = await adminApi.wasteItemPage({
+      keyword,
+      page: 0,
+      size: pageSize,
+    });
+
+    if (first.totalPages <= 1) {
+      return first.items;
+    }
+
+    const remainingPages = await Promise.all(
+      Array.from({ length: first.totalPages - 1 }, (_, index) =>
+        adminApi.wasteItemPage({
+          keyword,
+          page: index + 1,
+          size: pageSize,
+        }),
+      ),
+    );
+
+    return [
+      ...first.items,
+      ...remainingPages.flatMap((pageResult) => pageResult.items),
+    ];
   },
 
   async saveWasteItem(
-    item: Partial<WasteItem> & Pick<WasteItem, 'name' | 'category'>,
+    item: Partial<WasteItem> & Pick<WasteItem, "name" | "category">,
   ) {
     if (CONFIG.useMocks) {
       await delay();
       if (item.id) {
         wasteItems = wasteItems.map((wasteItem) =>
           wasteItem.id === item.id
-            ? { ...wasteItem, ...item, aliases: item.aliases ?? wasteItem.aliases } as WasteItem
+            ? ({
+                ...wasteItem,
+                ...item,
+                aliases: item.aliases ?? wasteItem.aliases,
+              } as WasteItem)
             : wasteItem,
         );
       } else {
@@ -1652,15 +1835,27 @@ export const adminApi = {
     const body = {
       categoryId: category.id,
       name: item.name,
-      searchKeywords: (item.aliases ?? []).join(','),
+      searchKeywords: (item.aliases ?? []).join(","),
       imageUrl: existing?.imageUrl ?? null,
     };
 
     await request(
       item.id ? ENDPOINTS.wasteItem(item.id) : ENDPOINTS.wasteItems,
-      item.id ? 'PATCH' : 'POST',
+      item.id ? "PATCH" : "POST",
       body,
     );
+  },
+
+  async deactivateWasteItem(id: number) {
+    if (CONFIG.useMocks) {
+      await delay();
+      wasteItems = wasteItems.map((item) =>
+        item.id === id ? { ...item, active: false } : item,
+      );
+      return;
+    }
+
+    await request(ENDPOINTS.wasteItemDeactivate(id), "PATCH");
   },
 
   async guides(): Promise<Guide[]> {
@@ -1669,7 +1864,7 @@ export const adminApi = {
       return [...guides];
     }
 
-    const items = await adminApi.wasteItems('');
+    const items = await adminApi.wasteItems("");
 
     const results = await Promise.all(
       items
@@ -1687,7 +1882,7 @@ export const adminApi = {
               wasteItem: detail.name,
               summary: detail.guide.summary,
               method: detail.guide.disposalMethod,
-              caution: detail.guide.caution ?? '',
+              caution: detail.guide.caution ?? "",
               checks: detail.guide.checkItems
                 .sort((a, b) => a.sortOrder - b.sortOrder)
                 .map((check) => check.content),
@@ -1702,14 +1897,19 @@ export const adminApi = {
   },
 
   async saveGuide(
-    item: Partial<Guide> & Pick<Guide, 'wasteItem' | 'summary' | 'method' | 'caution'>,
+    item: Partial<Guide> &
+      Pick<Guide, "wasteItem" | "summary" | "method" | "caution">,
   ) {
     if (CONFIG.useMocks) {
       await delay();
       if (item.id) {
         guides = guides.map((guide) =>
           guide.id === item.id
-            ? { ...guide, ...item, checks: item.checks ?? guide.checks } as Guide
+            ? ({
+                ...guide,
+                ...item,
+                checks: item.checks ?? guide.checks,
+              } as Guide)
             : guide,
         );
       } else {
@@ -1731,7 +1931,8 @@ export const adminApi = {
     const allItems = await adminApi.wasteItems(item.wasteItem);
     const wasteItem = allItems.find(
       (candidate) =>
-        candidate.name.trim().toLowerCase() === item.wasteItem.trim().toLowerCase(),
+        candidate.name.trim().toLowerCase() ===
+        item.wasteItem.trim().toLowerCase(),
     );
 
     if (!wasteItem) {
@@ -1740,10 +1941,10 @@ export const adminApi = {
 
     const checks = item.checks ?? [];
     if (checks.length === 0) {
-      throw new Error('체크리스트를 1개 이상 입력해주세요.');
+      throw new Error("체크리스트를 1개 이상 입력해주세요.");
     }
 
-    await request(ENDPOINTS.wasteItemGuide(wasteItem.id), 'PUT', {
+    await request(ENDPOINTS.wasteItemGuide(wasteItem.id), "PUT", {
       summary: item.summary,
       disposalMethod: item.method,
       caution: item.caution,
@@ -1755,35 +1956,82 @@ export const adminApi = {
     });
   },
 
-  async corrections(status: ReviewStatus | 'ALL'): Promise<AiCorrection[]> {
-    if (CONFIG.useMocks) {
-      await delay();
-      return corrections.filter((item) => status === 'ALL' || item.status === status);
-    }
+  async correctionPage(options?: {
+    status?: ReviewStatus | "ALL";
+    page?: number;
+    size?: number;
+  }): Promise<PageResult<AiCorrection>> {
+    const status = options?.status ?? "ALL";
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
 
-    const query = status === 'ALL' ? '' : `?status=${status}&size=200`;
-    const allQuery = status === 'ALL' ? '?size=200' : query;
-    const data = await request<unknown>(`${ENDPOINTS.aiCorrections}${allQuery}`);
-
-    return pageItems<BackendCorrection>(data).map((item) => ({
+    const mapCorrection = (item: BackendCorrection): AiCorrection => ({
       id: item.id,
       imageLogId: item.imageLogId,
       userEmail: item.userEmail,
-      aiItem: item.aiWasteItemName ?? '판별 실패',
+      aiItem: item.aiWasteItemName ?? "판별 실패",
       aiConfidence: item.aiConfidence ?? 0,
-      correctedItem: item.correctedWasteItemName ?? '-',
+      correctedItem: item.correctedWasteItemName ?? "-",
       status: item.reviewStatus,
       correctedAt: formatDate(item.correctedAt),
       memo: item.reviewMemo ?? undefined,
-    }));
+    });
+
+    if (CONFIG.useMocks) {
+      await delay();
+
+      const filtered = corrections.filter(
+        (item) => status === "ALL" || item.status === status,
+      );
+      const start = page * size;
+      const items = filtered.slice(start, start + size);
+
+      return {
+        items,
+        page,
+        size,
+        totalElements: filtered.length,
+        totalPages:
+          filtered.length === 0 ? 0 : Math.ceil(filtered.length / size),
+      };
+    }
+
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    });
+
+    if (status !== "ALL") {
+      params.set("status", status);
+    }
+
+    const data = await request<unknown>(
+      `${ENDPOINTS.aiCorrections}?${params.toString()}`,
+    );
+    const backendPage = pageResult<BackendCorrection>(data, page, size);
+
+    return {
+      ...backendPage,
+      items: backendPage.items.map(mapCorrection),
+    };
   },
 
-  async reviewCorrection(id: number, approved: boolean, memo = '') {
+  async corrections(status: ReviewStatus | "ALL"): Promise<AiCorrection[]> {
+    const result = await adminApi.correctionPage({
+      status,
+      page: 0,
+      size: 200,
+    });
+
+    return result.items;
+  },
+
+  async reviewCorrection(id: number, approved: boolean, memo = "") {
     if (CONFIG.useMocks) {
       await delay();
       corrections = corrections.map((item) =>
         item.id === id
-          ? { ...item, status: approved ? 'APPROVED' : 'REJECTED', memo }
+          ? { ...item, status: approved ? "APPROVED" : "REJECTED", memo }
           : item,
       );
       return;
@@ -1791,20 +2039,19 @@ export const adminApi = {
 
     await request(
       approved ? ENDPOINTS.approveAi(id) : ENDPOINTS.rejectAi(id),
-      'POST',
+      "POST",
       { memo },
     );
   },
 
-  async syncLogs(): Promise<SyncLog[]> {
-    if (CONFIG.useMocks) {
-      await delay();
-      return [...syncLogs];
-    }
+  async syncLogPage(options?: {
+    page?: number;
+    size?: number;
+  }): Promise<PageResult<SyncLog>> {
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
 
-    const data = await request<unknown>(`${ENDPOINTS.publicDataLogs}?size=100`);
-
-    return pageItems<BackendSyncLog>(data).map((item) => ({
+    const mapSyncLog = (item: BackendSyncLog): SyncLog => ({
       id: item.id,
       source: item.source,
       status: item.status,
@@ -1812,7 +2059,47 @@ export const adminApi = {
       updated: item.updatedCount,
       failed: item.failedCount,
       at: formatDate(item.finishedAt ?? item.startedAt),
-    }));
+    });
+
+    if (CONFIG.useMocks) {
+      await delay();
+
+      const start = page * size;
+      const items = syncLogs.slice(start, start + size);
+
+      return {
+        items,
+        page,
+        size,
+        totalElements: syncLogs.length,
+        totalPages:
+          syncLogs.length === 0 ? 0 : Math.ceil(syncLogs.length / size),
+      };
+    }
+
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    });
+
+    const data = await request<unknown>(
+      `${ENDPOINTS.publicDataLogs}?${params.toString()}`,
+    );
+    const backendPage = pageResult<BackendSyncLog>(data, page, size);
+
+    return {
+      ...backendPage,
+      items: backendPage.items.map(mapSyncLog),
+    };
+  },
+
+  async syncLogs(): Promise<SyncLog[]> {
+    const result = await adminApi.syncLogPage({
+      page: 0,
+      size: 100,
+    });
+
+    return result.items;
   },
 
   async syncPublicData() {
@@ -1821,43 +2108,82 @@ export const adminApi = {
       syncLogs = [
         {
           id: Date.now(),
-          source: '부산진구 생활폐기물 공공데이터',
-          status: 'SUCCESS',
+          source: "부산진구 생활폐기물 공공데이터",
+          status: "SUCCESS",
           inserted: 0,
           updated: 16,
           failed: 0,
-          at: new Date().toLocaleString('ko-KR'),
+          at: new Date().toLocaleString("ko-KR"),
         },
         ...syncLogs,
       ];
       return;
     }
 
-    await request(ENDPOINTS.publicDataSync, 'POST');
+    await request(ENDPOINTS.publicDataSync, "POST");
   },
 
-  async notifications(): Promise<Notification[]> {
-    if (CONFIG.useMocks) {
-      await delay();
-      return [...notifications];
-    }
+  async notificationPage(options?: {
+    page?: number;
+    size?: number;
+  }): Promise<PageResult<Notification>> {
+    const page = Math.max(options?.page ?? 0, 0);
+    const size = Math.max(options?.size ?? 20, 1);
 
-    const data = await request<unknown>(
-      `${ENDPOINTS.notifications}?size=200`,
-    );
-
-    return pageItems<BackendNotification>(data).map((item) => ({
+    const mapNotification = (item: BackendNotification): Notification => ({
       id: item.id,
       title: item.title,
       body: item.body,
       target: notificationTargetLabel(item.targetType),
       status: item.status,
       sentAt: formatDate(item.sentAt),
-    }));
+    });
+
+    if (CONFIG.useMocks) {
+      await delay();
+
+      const start = page * size;
+      const items = notifications.slice(start, start + size);
+
+      return {
+        items,
+        page,
+        size,
+        totalElements: notifications.length,
+        totalPages:
+          notifications.length === 0
+            ? 0
+            : Math.ceil(notifications.length / size),
+      };
+    }
+
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    });
+
+    const data = await request<unknown>(
+      `${ENDPOINTS.notifications}?${params.toString()}`,
+    );
+    const backendPage = pageResult<BackendNotification>(data, page, size);
+
+    return {
+      ...backendPage,
+      items: backendPage.items.map(mapNotification),
+    };
+  },
+
+  async notifications(): Promise<Notification[]> {
+    const result = await adminApi.notificationPage({
+      page: 0,
+      size: 200,
+    });
+
+    return result.items;
   },
 
   async createNotification(
-    item: Pick<Notification, 'title' | 'body' | 'target'>,
+    item: Pick<Notification, "title" | "body" | "target">,
   ) {
     if (CONFIG.useMocks) {
       await delay();
@@ -1865,15 +2191,15 @@ export const adminApi = {
         {
           id: Date.now(),
           ...item,
-          status: 'SENT',
-          sentAt: new Date().toLocaleString('ko-KR'),
+          status: "SENT",
+          sentAt: new Date().toLocaleString("ko-KR"),
         },
         ...notifications,
       ];
       return;
     }
 
-    await request(ENDPOINTS.notifications, 'POST', {
+    await request(ENDPOINTS.notifications, "POST", {
       title: item.title,
       body: item.body,
       targetType: notificationTargetValue(item.target),
@@ -1884,12 +2210,11 @@ export const adminApi = {
     if (CONFIG.useMocks) {
       await delay();
       notifications = notifications.map((item) =>
-        item.id === id ? { ...item, status: 'CANCELLED' } : item,
+        item.id === id ? { ...item, status: "CANCELLED" } : item,
       );
       return;
     }
 
-    await request(ENDPOINTS.cancelNotification(id), 'PATCH');
+    await request(ENDPOINTS.cancelNotification(id), "PATCH");
   },
-
 };

@@ -22,6 +22,8 @@ import type {
   AreaScheduleCoverage,
   AreaScheduleGroupCoverage,
   CollectionArea,
+  CollectionAreaGroup,
+  CollectionAreaGroupDetail,
   CollectionWasteType,
   Dashboard,
   GeneralHousingSchedule,
@@ -153,6 +155,19 @@ function TableWrap({ children }: { children: ReactNode }) {
     <div className="table-wrap">
       <div className="table-scroll">{children}</div>
     </div>
+  );
+}
+
+function getPageBlock(currentPage: number, totalPages: number) {
+  if (totalPages <= 0) return [];
+
+  const blockSize = 10;
+  const blockStart = Math.floor((currentPage - 1) / blockSize) * blockSize + 1;
+  const blockEnd = Math.min(totalPages, blockStart + blockSize - 1);
+
+  return Array.from(
+    { length: blockEnd - blockStart + 1 },
+    (_, index) => blockStart + index,
   );
 }
 
@@ -645,18 +660,10 @@ function UsersPage() {
     }
   }
 
-  const visiblePages = useMemo(() => {
-    if (totalPages <= 0) return [];
-
-    let start = Math.max(1, page - 2);
-    let end = Math.min(totalPages, start + 4);
-
-    if (end - start < 4) {
-      start = Math.max(1, end - 4);
-    }
-
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
-  }, [page, totalPages]);
+  const visiblePages = useMemo(
+    () => getPageBlock(page, totalPages),
+    [page, totalPages],
+  );
 
   return (
     <>
@@ -905,79 +912,349 @@ function UsersPage() {
 }
 
 function ResidencesPage() {
+  const PAGE_SIZE = 20;
+
   const [items, setItems] = useState<Residence[]>([]);
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<ReviewStatus>("PENDING");
+  const [page, setPage] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
-  const load = async () => {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const [selected, setSelected] = useState<Residence | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  async function load() {
     setLoading(true);
-    setItems(await adminApi.residences());
-    setLoading(false);
-  };
-  useEffect(() => {
-    load();
-  }, []);
-  async function review(id: number, ok: boolean) {
-    await adminApi.reviewResidence(id, ok);
-    await load();
+    setError("");
+
+    try {
+      const result = await adminApi.residencePage({
+        keyword: query,
+        status,
+        page: page - 1,
+        size: PAGE_SIZE,
+      });
+
+      setItems(result.items);
+      setTotalElements(result.totalElements);
+      setTotalPages(result.totalPages);
+
+      if (result.totalPages > 0 && page > result.totalPages) {
+        setPage(result.totalPages);
+      }
+    } catch (err) {
+      setItems([]);
+      setTotalElements(0);
+      setTotalPages(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "공동주택 목록을 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }
+
+  useEffect(() => {
+    void load();
+  }, [page, query, status]);
+
+  function applySearch() {
+    setPage(1);
+    setQuery(queryInput.trim());
+  }
+
+  function resetSearch() {
+    setQueryInput("");
+    setQuery("");
+    setStatus("PENDING");
+    setPage(1);
+  }
+
+  function openResidence(item: Residence) {
+    setSelected(item);
+    setRejectionReason("");
+  }
+
+  async function review(ok: boolean) {
+    if (!selected) return;
+
+    if (!ok && !rejectionReason.trim()) {
+      window.alert("거절 사유를 입력해주세요.");
+      return;
+    }
+
+    const action = ok ? "승인" : "거절";
+
+    if (
+      !window.confirm(`${selected.name} 공동주택 등록 요청을 ${action}할까요?`)
+    ) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await adminApi.reviewResidence(selected.id, ok, rejectionReason);
+
+      setSelected(null);
+      setRejectionReason("");
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : `공동주택 ${action} 처리에 실패했습니다.`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const visiblePages = useMemo(
+    () => getPageBlock(page, totalPages),
+    [page, totalPages],
+  );
+
+  const statusLabel: Record<ReviewStatus, string> = {
+    PENDING: "승인 대기",
+    APPROVED: "승인 완료",
+    REJECTED: "거절",
+  };
+
   return (
     <>
       <PageHeader
         title="공동주택 관리"
-        subtitle="아파트·오피스텔 등 공동주택 등록 요청을 승인하거나 거절합니다."
+        subtitle="아파트·오피스텔 등록 요청을 검색하고 상태별로 검수합니다."
       />
+
+      <div className="notice">
+        <b>목록도 서버 페이지네이션을 사용합니다.</b>
+        <span>
+          현재 선택한 승인 상태의 공동주택만 20개씩 조회해서 데이터가 많아져도
+          관리자 화면이 무거워지지 않도록 구성합니다.
+        </span>
+      </div>
+
+      <section className="area-filter-panel">
+        <div className="area-filter-grid">
+          <label className="area-search-field">
+            <span>공동주택 검색</span>
+            <input
+              className="search"
+              placeholder="공동주택명, 주소, 건물관리번호"
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && applySearch()}
+            />
+          </label>
+
+          <label>
+            <span>승인 상태</span>
+            <select
+              value={status}
+              onChange={(event) => {
+                setPage(1);
+                setStatus(event.target.value as ReviewStatus);
+              }}
+            >
+              <option value="PENDING">승인 대기</option>
+              <option value="APPROVED">승인 완료</option>
+              <option value="REJECTED">거절</option>
+            </select>
+          </label>
+
+          <div className="area-filter-actions">
+            <button className="btn primary" onClick={applySearch}>
+              검색
+            </button>
+            <button className="btn" onClick={resetSearch}>
+              초기화
+            </button>
+          </div>
+        </div>
+
+        <div className="area-result-summary">
+          <span>
+            {statusLabel[status]} <b>{totalElements.toLocaleString()}</b>개
+          </span>
+          <span>페이지당 {PAGE_SIZE}개</span>
+          {query && (
+            <span>
+              검색어 <b>“{query}”</b>
+            </span>
+          )}
+        </div>
+      </section>
+
+      {error && <div className="error-box">{error}</div>}
+
       {loading ? (
         <Loading />
+      ) : items.length === 0 ? (
+        <Empty text="조건에 맞는 공동주택이 없습니다." />
       ) : (
-        <TableWrap>
-          <table>
-            <thead>
-              <tr>
-                <th>거주지</th>
-                <th>유형</th>
-                <th>주소</th>
-                <th>건물관리번호</th>
-                <th>수거구역</th>
-                <th>상태</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((x) => (
-                <tr key={x.id}>
-                  <td>
-                    <b>{x.name}</b>
-                  </td>
-                  <td>{x.type}</td>
-                  <td>{x.address}</td>
-                  <td>{x.buildingNo ?? "-"}</td>
-                  <td>{x.area ?? "미연결"}</td>
-                  <td>
-                    <Badge value={x.approval} />
-                  </td>
-                  <td className="right">
-                    {x.approval === "PENDING" && (
-                      <div className="actions">
-                        <button
-                          className="btn small primary"
-                          onClick={() => review(x.id, true)}
-                        >
-                          승인
-                        </button>
-                        <button
-                          className="btn small danger"
-                          onClick={() => review(x.id, false)}
-                        >
-                          거절
-                        </button>
-                      </div>
-                    )}
-                  </td>
+        <>
+          <TableWrap>
+            <table>
+              <thead>
+                <tr>
+                  <th>공동주택</th>
+                  <th>유형</th>
+                  <th>주소</th>
+                  <th>건물관리번호</th>
+                  <th>상태</th>
+                  <th />
                 </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <b>{item.name}</b>
+                      <small>Apartment #{item.id}</small>
+                    </td>
+                    <td>{item.type}</td>
+                    <td>{item.address}</td>
+                    <td>{item.buildingNo ?? "-"}</td>
+                    <td>
+                      <Badge value={item.approval} />
+                    </td>
+                    <td className="right">
+                      <button
+                        className={`btn small ${
+                          item.approval === "PENDING" ? "primary" : ""
+                        }`}
+                        onClick={() => openResidence(item)}
+                      >
+                        {item.approval === "PENDING" ? "검수" : "상세"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+
+          <div className="pagination-bar">
+            <div className="pagination-summary">
+              {totalPages > 0 ? `${page} / ${totalPages} 페이지` : "0 페이지"}
+            </div>
+
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹ 이전
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`page-btn ${pageNumber === page ? "active" : ""}`}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
               ))}
-            </tbody>
-          </table>
-        </TableWrap>
+
+              <button
+                className="page-btn"
+                disabled={totalPages === 0 || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                다음 ›
+              </button>
+            </div>
+          </div>
+        </>
       )}
+
+      <Modal
+        open={selected !== null}
+        title={
+          selected
+            ? `${selected.name} · ${
+                selected.approval === "PENDING" ? "등록 검수" : "상세 정보"
+              }`
+            : "공동주택 상세"
+        }
+        onClose={() => {
+          if (!saving) {
+            setSelected(null);
+            setRejectionReason("");
+          }
+        }}
+        footer={
+          selected?.approval === "PENDING" ? (
+            <>
+              <button
+                className="btn danger"
+                disabled={saving}
+                onClick={() => void review(false)}
+              >
+                거절
+              </button>
+              <button
+                className="btn primary"
+                disabled={saving}
+                onClick={() => void review(true)}
+              >
+                {saving ? "처리 중..." : "승인"}
+              </button>
+            </>
+          ) : (
+            <button className="btn" onClick={() => setSelected(null)}>
+              닫기
+            </button>
+          )
+        }
+      >
+        {selected && (
+          <div className="form-grid">
+            <div className="info">
+              <span>공동주택명</span>
+              <b>{selected.name}</b>
+            </div>
+            <div className="info">
+              <span>상태</span>
+              <Badge value={selected.approval} />
+            </div>
+            <div className="info full">
+              <span>주소</span>
+              <b>{selected.address}</b>
+            </div>
+            <div className="info full">
+              <span>건물관리번호</span>
+              <b>{selected.buildingNo ?? "-"}</b>
+            </div>
+
+            {selected.approval === "PENDING" && (
+              <label className="full">
+                <span>거절 사유</span>
+                <textarea
+                  rows={4}
+                  value={rejectionReason}
+                  disabled={saving}
+                  onChange={(event) => setRejectionReason(event.target.value)}
+                  placeholder="거절할 경우 신청자에게 전달할 사유를 입력해주세요."
+                />
+              </label>
+            )}
+          </div>
+        )}
+      </Modal>
     </>
   );
 }
@@ -985,9 +1262,16 @@ function ResidencesPage() {
 function AreasPage() {
   const PAGE_SIZE = 20;
 
-  const [items, setItems] = useState<CollectionArea[]>([]);
+  const [items, setItems] = useState<CollectionAreaGroup[]>([]);
   const [editing, setEditing] = useState<CollectionArea | null>(null);
   const [creating, setCreating] = useState(false);
+
+  const [detailGroup, setDetailGroup] = useState<CollectionAreaGroup | null>(
+    null,
+  );
+  const [detail, setDetail] = useState<CollectionAreaGroupDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
 
   const [name, setName] = useState("");
   const [district, setDistrict] = useState("부산진구");
@@ -1011,7 +1295,7 @@ function AreasPage() {
     setError("");
 
     try {
-      const result = await adminApi.areas({
+      const result = await adminApi.areaGroups({
         keyword: query,
         sourceType: sourceFilter,
         active: activeFilter,
@@ -1055,6 +1339,32 @@ function AreasPage() {
     setPage(1);
   }
 
+  async function openGroup(group: CollectionAreaGroup) {
+    setDetailGroup(group);
+    setDetail(null);
+    setDetailError("");
+    setDetailLoading(true);
+
+    try {
+      setDetail(await adminApi.areaGroupDetail(group));
+    } catch (err) {
+      setDetailError(
+        err instanceof Error
+          ? err.message
+          : "수거구역 원본 정보를 불러오지 못했습니다.",
+      );
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function closeGroup() {
+    setDetailGroup(null);
+    setDetail(null);
+    setDetailError("");
+    setDetailLoading(false);
+  }
+
   function open(item?: CollectionArea) {
     if (item) {
       if (item.sourceType !== "MANUAL") {
@@ -1064,6 +1374,7 @@ function AreasPage() {
         return;
       }
 
+      closeGroup();
       setEditing(item);
       setName(item.name);
       setDistrict(item.district);
@@ -1092,6 +1403,7 @@ function AreasPage() {
       });
 
       setCreating(false);
+      setEditing(null);
       await load();
     } catch (err) {
       window.alert(
@@ -1104,12 +1416,16 @@ function AreasPage() {
     const nextActive = !item.active;
     const action = nextActive ? "활성화" : "비활성화";
 
-    if (!window.confirm(`${item.name} 수거구역을 ${action}할까요?`)) {
+    if (!window.confirm(`${item.name} 원본 수거구역을 ${action}할까요?`)) {
       return;
     }
 
     try {
       await adminApi.setAreaActive(item.id, nextActive);
+
+      // active가 지역 그룹 키에 포함되므로 상태 변경 후에는
+      // 상세 모달을 닫고 그룹 목록을 새로 조회합니다.
+      closeGroup();
       await load();
     } catch (err) {
       window.alert(
@@ -1120,19 +1436,10 @@ function AreasPage() {
     }
   }
 
-  const visiblePages = useMemo(() => {
-    if (totalPages <= 0) return [];
-
-    const maxButtons = 5;
-    let start = Math.max(1, page - Math.floor(maxButtons / 2));
-    let end = Math.min(totalPages, start + maxButtons - 1);
-
-    if (end - start + 1 < maxButtons) {
-      start = Math.max(1, end - maxButtons + 1);
-    }
-
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
-  }, [page, totalPages]);
+  const visiblePages = useMemo(
+    () => getPageBlock(page, totalPages),
+    [page, totalPages],
+  );
 
   const wasteTypeLabel = (value: string) => {
     const labels: Record<string, string> = {
@@ -1144,11 +1451,14 @@ function AreasPage() {
     return labels[value] ?? value;
   };
 
+  const sourceLabel = (value: "MOIS_HOUSEHOLD_WASTE" | "MANUAL" | undefined) =>
+    value === "MANUAL" ? "관리자 직접 등록" : "공공데이터";
+
   return (
     <>
       <PageHeader
         title="수거구역 관리"
-        subtitle="공공데이터 수거구역을 검색·필터링하고 필요한 구역을 관리자가 직접 추가합니다."
+        subtitle="같은 실제 지역은 한 줄로 묶어 확인하고, 상세 보기에서 공공데이터 원본을 각각 관리합니다."
         action={
           <button className="btn primary" onClick={() => open()}>
             + 수거구역 추가
@@ -1156,13 +1466,21 @@ function AreasPage() {
         }
       />
 
+      <div className="notice">
+        <b>DB 원본은 그대로 보존합니다.</b>
+        <span>
+          목록에서만 같은 지역을 하나로 묶어 보여주며, 관리번호·지원 폐기물 등
+          실제 원본 정보는 상세 보기에서 확인할 수 있습니다.
+        </span>
+      </div>
+
       <section className="area-filter-panel">
         <div className="area-filter-grid">
           <label className="area-search-field">
             <span>지역·구역 검색</span>
             <input
               className="search"
-              placeholder="시/도, 시/군/구, 구역명, 대상지역, 관리번호"
+              placeholder="시/도, 시/군/구, 대상지역, 관리번호"
               value={queryInput}
               onChange={(event) => setQueryInput(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && applySearch()}
@@ -1213,9 +1531,9 @@ function AreasPage() {
 
         <div className="area-result-summary">
           <span>
-            총 <b>{totalElements.toLocaleString()}</b>개
+            전체 지역 <b>{totalElements.toLocaleString()}</b>개
           </span>
-          <span>페이지당 {PAGE_SIZE}개</span>
+          <span>페이지당 지역 {PAGE_SIZE}개</span>
           {query && (
             <span>
               검색어 <b>“{query}”</b>
@@ -1236,95 +1554,61 @@ function AreasPage() {
             <table className="area-table">
               <thead>
                 <tr>
-                  <th>구역</th>
+                  <th>대상지역</th>
                   <th>시/도</th>
                   <th>시/군/구</th>
-                  <th>대상지역</th>
-                  <th>수거종류</th>
                   <th>출처</th>
                   <th>상태</th>
-                  <th>최근 갱신</th>
+                  <th>원본 데이터</th>
                   <th />
                 </tr>
               </thead>
 
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <b>{item.name}</b>
-                      <small>
-                        관리번호: {item.externalManagementNumber || "-"}
-                      </small>
-                    </td>
+                {items.map((group) => {
+                  const key = [
+                    group.sido,
+                    group.district,
+                    group.targetAreaName,
+                    group.sourceType,
+                    String(group.active),
+                  ].join("||");
 
-                    <td>{item.sido || "-"}</td>
-
-                    <td>{item.district || "-"}</td>
-
-                    <td>
-                      <div className="area-target-text">
-                        {item.dongs.length
-                          ? item.dongs.join(", ")
-                          : item.targetAreaName || "-"}
-                      </div>
-                    </td>
-
-                    <td>
-                      <div className="waste-type-badges">
-                        {item.wasteTypes?.length ? (
-                          item.wasteTypes.map((wasteType) => (
-                            <span className="mini-chip" key={wasteType}>
-                              {wasteTypeLabel(wasteType)}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="muted">-</span>
-                        )}
-                      </div>
-                    </td>
-
-                    <td>
-                      <span
-                        className={`source-chip ${
-                          item.sourceType === "MANUAL" ? "manual" : ""
-                        }`}
-                      >
-                        {item.sourceType === "MANUAL"
-                          ? "관리자 직접 등록"
-                          : "공공데이터"}
-                      </span>
-                    </td>
-
-                    <td>
-                      <Badge value={item.active ? "ACTIVE" : "INACTIVE"} />
-                    </td>
-
-                    <td>{item.updatedAt}</td>
-
-                    <td className="right">
-                      <div className="actions">
-                        {item.sourceType === "MANUAL" && (
-                          <button
-                            className="btn small"
-                            onClick={() => open(item)}
-                          >
-                            수정
-                          </button>
-                        )}
-
-                        <button
-                          className={`btn small ${
-                            item.active ? "danger" : "primary"
+                  return (
+                    <tr key={key}>
+                      <td>
+                        <b>{group.targetAreaName}</b>
+                      </td>
+                      <td>{group.sido}</td>
+                      <td>{group.district}</td>
+                      <td>
+                        <span
+                          className={`source-chip ${
+                            group.sourceType === "MANUAL" ? "manual" : ""
                           }`}
-                          onClick={() => toggleActive(item)}
                         >
-                          {item.active ? "비활성화" : "활성화"}
+                          {sourceLabel(group.sourceType)}
+                        </span>
+                      </td>
+                      <td>
+                        <Badge value={group.active ? "ACTIVE" : "INACTIVE"} />
+                      </td>
+                      <td>
+                        <span className="area-original-count">
+                          <b>{group.originalCount.toLocaleString()}</b>개
+                        </span>
+                      </td>
+                      <td className="right">
+                        <button
+                          className="btn small primary"
+                          onClick={() => void openGroup(group)}
+                        >
+                          상세 보기 ({group.originalCount})
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </TableWrap>
@@ -1366,6 +1650,148 @@ function AreasPage() {
           </div>
         </>
       )}
+
+      <Modal
+        open={detailGroup !== null}
+        title={
+          detailGroup
+            ? `${detailGroup.sido} ${detailGroup.district} · ${detailGroup.targetAreaName}`
+            : "수거구역 상세"
+        }
+        onClose={closeGroup}
+        footer={
+          <button className="btn" onClick={closeGroup}>
+            닫기
+          </button>
+        }
+      >
+        {detailError && <div className="error-box">{detailError}</div>}
+
+        {detailLoading ? (
+          <Loading />
+        ) : detail ? (
+          <>
+            <div className="notice">
+              <b>
+                실제 CollectionArea 원본 {detail.originalCount.toLocaleString()}
+                개
+              </b>
+              <span>
+                같은 지역으로 표시되지만 관리번호, 수거 종류, 기준일자 등 원본
+                정보는 각각 유지됩니다.
+              </span>
+            </div>
+
+            <div className="schedule-pattern-grid">
+              {detail.originals.map((item, index) => (
+                <section className="schedule-pattern-card" key={item.id}>
+                  <header>
+                    <div>
+                      <b>원본 {index + 1}</b>
+                      <small>CollectionArea #{item.id}</small>
+                    </div>
+                    <Badge value={item.active ? "ACTIVE" : "INACTIVE"} />
+                  </header>
+
+                  <div className="form-grid">
+                    <div className="info">
+                      <span>관리구역명</span>
+                      <b>{item.name}</b>
+                    </div>
+
+                    <div className="info">
+                      <span>관리번호</span>
+                      <b>{item.externalManagementNumber || "-"}</b>
+                    </div>
+
+                    <div className="info">
+                      <span>시/도</span>
+                      <b>{item.sido || "-"}</b>
+                    </div>
+
+                    <div className="info">
+                      <span>시/군/구</span>
+                      <b>{item.district}</b>
+                    </div>
+
+                    <div className="info full">
+                      <span>대상지역</span>
+                      <b>
+                        {item.targetAreaName || item.dongs.join(", ") || "-"}
+                      </b>
+                    </div>
+
+                    <div className="info full">
+                      <span>지원 폐기물</span>
+                      <div className="waste-type-badges">
+                        {item.wasteTypes?.length ? (
+                          item.wasteTypes.map((wasteType) => (
+                            <span className="mini-chip" key={wasteType}>
+                              {wasteTypeLabel(wasteType)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="info">
+                      <span>출처</span>
+                      <b>{sourceLabel(item.sourceType)}</b>
+                    </div>
+
+                    <div className="info">
+                      <span>공공데이터 기준일</span>
+                      <b>{item.sourceReferenceDate || "-"}</b>
+                    </div>
+
+                    <div className="info">
+                      <span>생성일</span>
+                      <b>{item.createdAt || "-"}</b>
+                    </div>
+
+                    <div className="info">
+                      <span>최근 갱신</span>
+                      <b>{item.updatedAt || "-"}</b>
+                    </div>
+                  </div>
+
+                  <footer className="schedule-pattern-footer">
+                    <span
+                      className={`source-chip ${
+                        item.sourceType === "MANUAL" ? "manual" : ""
+                      }`}
+                    >
+                      {sourceLabel(item.sourceType)}
+                    </span>
+
+                    <div className="actions">
+                      {item.sourceType === "MANUAL" && (
+                        <button
+                          className="btn small"
+                          onClick={() => open(item)}
+                        >
+                          수정
+                        </button>
+                      )}
+
+                      <button
+                        className={`btn small ${
+                          item.active ? "danger" : "primary"
+                        }`}
+                        onClick={() => void toggleActive(item)}
+                      >
+                        {item.active ? "비활성화" : "활성화"}
+                      </button>
+                    </div>
+                  </footer>
+                </section>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </Modal>
 
       <Modal
         open={creating}
@@ -1636,26 +2062,10 @@ function SchedulesPage() {
     });
   }
 
-  const generalPages = useMemo(() => {
-    if (generalTotalPages <= 0) {
-      return [];
-    }
-
-    let start = Math.max(1, generalPage - 2);
-
-    let end = Math.min(generalTotalPages, start + 4);
-
-    if (end - start < 4) {
-      start = Math.max(1, end - 4);
-    }
-
-    return Array.from(
-      {
-        length: end - start + 1,
-      },
-      (_, index) => start + index,
-    );
-  }, [generalPage, generalTotalPages]);
+  const generalPages = useMemo(
+    () => getPageBlock(generalPage, generalTotalPages),
+    [generalPage, generalTotalPages],
+  );
 
   /* 공동주택 */
   const [apartments, setApartments] = useState<Residence[]>([]);
@@ -2634,41 +3044,132 @@ function SchedulesPage() {
 }
 
 function WasteItemsPage() {
+  const PAGE_SIZE = 20;
+
   const [items, setItems] = useState<WasteItem[]>([]);
-  const [q, setQ] = useState("");
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
+
   const [editing, setEditing] = useState<WasteItem | null>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("폐전지류");
   const [aliases, setAliases] = useState("");
   const [ai, setAi] = useState(false);
-  const load = async () => setItems(await adminApi.wasteItems(q));
+
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await adminApi.wasteItemPage({
+        keyword: query,
+        page: page - 1,
+        size: PAGE_SIZE,
+      });
+
+      setItems(result.items);
+      setTotalElements(result.totalElements);
+      setTotalPages(result.totalPages);
+
+      if (result.totalPages > 0 && page > result.totalPages) {
+        setPage(result.totalPages);
+      }
+    } catch (err) {
+      setItems([]);
+      setTotalElements(0);
+      setTotalPages(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "폐기물 품목을 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    load();
-  }, []);
-  function show(x?: WasteItem) {
-    setEditing(x ?? null);
-    setName(x?.name ?? "");
-    setCategory(x?.category ?? "폐전지류");
-    setAliases(x?.aliases.join(", ") ?? "");
-    setAi(x?.aiSupported ?? false);
+    void load();
+  }, [page, query]);
+
+  function applySearch() {
+    setPage(1);
+    setQuery(queryInput.trim());
+  }
+
+  function resetSearch() {
+    setQueryInput("");
+    setQuery("");
+    setPage(1);
+  }
+
+  function show(item?: WasteItem) {
+    setEditing(item ?? null);
+    setName(item?.name ?? "");
+    setCategory(item?.category ?? "폐전지류");
+    setAliases(item?.aliases.join(", ") ?? "");
+    setAi(item?.aiSupported ?? false);
     setOpen(true);
   }
+
   async function save() {
-    await adminApi.saveWasteItem({
-      id: editing?.id,
-      name,
-      category,
-      aliases: aliases
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      aiSupported: ai,
-      active: true,
-    });
-    setOpen(false);
-    await load();
+    try {
+      await adminApi.saveWasteItem({
+        id: editing?.id,
+        name: name.trim(),
+        category: category.trim(),
+        aliases: aliases
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        aiSupported: ai,
+        active: editing?.active ?? true,
+      });
+
+      setOpen(false);
+      setEditing(null);
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "폐기물 품목 저장에 실패했습니다.",
+      );
+    }
   }
+
+  async function deactivate(item: WasteItem) {
+    if (
+      !window.confirm(
+        `'${item.name}' 품목을 비활성화할까요?\n비활성화 후에는 사용자 검색 대상에서 제외될 수 있습니다.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusyId(item.id);
+
+    try {
+      await adminApi.deactivateWasteItem(item.id);
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "폐기물 품목 비활성화에 실패했습니다.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const visiblePages = getPageBlock(page, totalPages);
+
   return (
     <>
       <PageHeader
@@ -2680,62 +3181,157 @@ function WasteItemsPage() {
           </button>
         }
       />
+
       <div className="notice">
         <b>AI 미지원 품목도 서비스에는 등록할 수 있어요.</b>
         <span>
-          폐건전지, 전선, 마우스, 충전기, 키보드 등은 직접 검색 fallback으로
-          정확한 가이드를 제공할 수 있습니다.
+          폐건전지, 전선, 마우스, 충전기, 키보드 등은 직접 검색으로 정확한
+          분리배출 가이드를 제공할 수 있습니다. 사용하지 않는 품목은 삭제 대신
+          비활성화해 기존 데이터 관계를 보존합니다.
         </span>
       </div>
-      <div className="toolbar">
-        <input
-          className="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="품목명, 카테고리, 별칭 검색"
-        />
-        <button className="btn primary" onClick={load}>
-          검색
-        </button>
-      </div>
-      <TableWrap>
-        <table>
-          <thead>
-            <tr>
-              <th>품목</th>
-              <th>카테고리</th>
-              <th>검색 별칭</th>
-              <th>AI 인식</th>
-              <th>상태</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((x) => (
-              <tr key={x.id}>
-                <td>
-                  <b>{x.name}</b>
-                </td>
-                <td>{x.category}</td>
-                <td>{x.aliases.join(", ") || "-"}</td>
-                <td>
-                  <span className={x.aiSupported ? "ai-ok" : "muted"}>
-                    {x.aiSupported ? "지원" : "검색 전용"}
-                  </span>
-                </td>
-                <td>
-                  <Badge value={x.active ? "ACTIVE" : "INACTIVE"} />
-                </td>
-                <td className="right">
-                  <button className="btn small" onClick={() => show(x)}>
-                    수정
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableWrap>
+
+      <section className="user-filter-panel">
+        <div className="user-filter-row">
+          <label className="user-search-field">
+            <span>폐기물 품목 검색</span>
+            <input
+              className="search"
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  applySearch();
+                }
+              }}
+              placeholder="품목명, 카테고리, 검색 별칭"
+            />
+          </label>
+
+          <div className="user-filter-actions">
+            <button className="btn primary" onClick={applySearch}>
+              검색
+            </button>
+            <button className="btn" onClick={resetSearch}>
+              초기화
+            </button>
+          </div>
+        </div>
+
+        <div className="area-result-summary">
+          <span>
+            전체 품목 <b>{totalElements.toLocaleString()}</b>개
+          </span>
+          <span>페이지당 {PAGE_SIZE}개</span>
+          {query && (
+            <span>
+              검색어 <b>“{query}”</b>
+            </span>
+          )}
+        </div>
+      </section>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {loading ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <Empty text="조건에 맞는 폐기물 품목이 없습니다." />
+      ) : (
+        <>
+          <TableWrap>
+            <table>
+              <thead>
+                <tr>
+                  <th>품목</th>
+                  <th>카테고리</th>
+                  <th>검색 별칭</th>
+                  <th>AI 인식</th>
+                  <th>상태</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <b>{item.name}</b>
+                    </td>
+                    <td>{item.category}</td>
+                    <td>{item.aliases.join(", ") || "-"}</td>
+                    <td>
+                      <span className={item.aiSupported ? "ai-ok" : "muted"}>
+                        {item.aiSupported ? "지원" : "검색 전용"}
+                      </span>
+                    </td>
+                    <td>
+                      <Badge value={item.active ? "ACTIVE" : "INACTIVE"} />
+                    </td>
+                    <td className="right">
+                      <div className="actions">
+                        <button
+                          className="btn small"
+                          onClick={() => show(item)}
+                          disabled={busyId === item.id}
+                        >
+                          수정
+                        </button>
+
+                        {item.active && (
+                          <button
+                            className="btn small danger"
+                            onClick={() => void deactivate(item)}
+                            disabled={busyId === item.id}
+                          >
+                            {busyId === item.id ? "처리 중..." : "비활성화"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+
+          <div className="pagination-bar">
+            <div className="pagination-summary">
+              {totalPages > 0 ? `${page} / ${totalPages} 페이지` : "0 페이지"}
+            </div>
+
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹ 이전
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`page-btn ${pageNumber === page ? "active" : ""}`}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              <button
+                className="page-btn"
+                disabled={totalPages === 0 || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                다음 ›
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       <Modal
         open={open}
         title={editing ? "폐기물 품목 수정" : "폐기물 품목 추가"}
@@ -2748,7 +3344,7 @@ function WasteItemsPage() {
             <button
               className="btn primary"
               onClick={save}
-              disabled={!name.trim()}
+              disabled={!name.trim() || !category.trim()}
             >
               저장
             </button>
@@ -2758,23 +3354,29 @@ function WasteItemsPage() {
         <div className="form-grid">
           <label>
             <span>품목명</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </label>
+
           <label>
             <span>카테고리</span>
             <input
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(event) => setCategory(event.target.value)}
             />
           </label>
+
           <label className="full">
             <span>검색 별칭</span>
             <input
               value={aliases}
-              onChange={(e) => setAliases(e.target.value)}
+              onChange={(event) => setAliases(event.target.value)}
               placeholder="건전지, 배터리, AA배터리"
             />
           </label>
+
           <label className="check full">
             <input type="checkbox" checked={ai} disabled /> AI 지원 여부는
             배포된 모델 클래스 기준으로 자동 표시됩니다.
@@ -2786,7 +3388,15 @@ function WasteItemsPage() {
 }
 
 function GuidesPage() {
+  const PAGE_SIZE = 20;
+
   const [items, setItems] = useState<Guide[]>([]);
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [editing, setEditing] = useState<Guide | null>(null);
   const [open, setOpen] = useState(false);
   const [wasteItem, setWasteItem] = useState("");
@@ -2794,34 +3404,112 @@ function GuidesPage() {
   const [method, setMethod] = useState("");
   const [caution, setCaution] = useState("");
   const [checks, setChecks] = useState("");
-  const load = async () => setItems(await adminApi.guides());
+
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      setItems(await adminApi.guides());
+    } catch (err) {
+      setItems([]);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "분리배출 가이드를 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    load();
+    void load();
   }, []);
-  function show(x?: Guide) {
-    setEditing(x ?? null);
-    setWasteItem(x?.wasteItem ?? "");
-    setSummary(x?.summary ?? "");
-    setMethod(x?.method ?? "");
-    setCaution(x?.caution ?? "");
-    setChecks(x?.checks.join("\n") ?? "");
+
+  const filteredItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+
+    if (!normalized) {
+      return items;
+    }
+
+    return items.filter((item) =>
+      [
+        item.wasteItem,
+        item.summary,
+        item.method,
+        item.caution,
+        ...item.checks,
+      ].some((value) => value.toLowerCase().includes(normalized)),
+    );
+  }, [items, query]);
+
+  const totalPages =
+    filteredItems.length === 0
+      ? 0
+      : Math.ceil(filteredItems.length / PAGE_SIZE);
+
+  const pageItems = filteredItems.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  function applySearch() {
+    setPage(1);
+    setQuery(queryInput.trim());
+  }
+
+  function resetSearch() {
+    setQueryInput("");
+    setQuery("");
+    setPage(1);
+  }
+
+  function show(item?: Guide) {
+    setEditing(item ?? null);
+    setWasteItem(item?.wasteItem ?? "");
+    setSummary(item?.summary ?? "");
+    setMethod(item?.method ?? "");
+    setCaution(item?.caution ?? "");
+    setChecks(item?.checks.join("\n") ?? "");
     setOpen(true);
   }
+
   async function save() {
-    await adminApi.saveGuide({
-      id: editing?.id,
-      wasteItem,
-      summary,
-      method,
-      caution,
-      checks: checks
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean),
-    });
-    setOpen(false);
-    await load();
+    try {
+      await adminApi.saveGuide({
+        id: editing?.id,
+        wasteItem: wasteItem.trim(),
+        summary: summary.trim(),
+        method: method.trim(),
+        caution: caution.trim(),
+        checks: checks
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      });
+
+      setOpen(false);
+      setEditing(null);
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "분리배출 가이드 저장에 실패했습니다.",
+      );
+    }
   }
+
+  const visiblePages = getPageBlock(page, totalPages);
+
   return (
     <>
       <PageHeader
@@ -2833,36 +3521,123 @@ function GuidesPage() {
           </button>
         }
       />
-      <div className="guide-list">
-        {items.map((x) => (
-          <article className="guide" key={x.id}>
-            <div className="guide-head">
-              <div>
-                <small>{x.wasteItem}</small>
-                <h3>{x.summary}</h3>
-              </div>
-              <button className="btn small" onClick={() => show(x)}>
-                수정
+
+      <section className="user-filter-panel">
+        <div className="user-filter-row">
+          <label className="user-search-field">
+            <span>가이드 검색</span>
+            <input
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  applySearch();
+                }
+              }}
+              placeholder="품목명, 요약, 배출 방법, 체크리스트"
+            />
+          </label>
+
+          <div className="user-filter-actions">
+            <button className="btn primary" onClick={applySearch}>
+              검색
+            </button>
+            <button className="btn" onClick={resetSearch}>
+              초기화
+            </button>
+          </div>
+        </div>
+
+        <div className="area-result-summary">
+          <span>
+            검색 결과 <b>{filteredItems.length.toLocaleString()}</b>개
+          </span>
+          <span>페이지당 {PAGE_SIZE}개</span>
+          {query && (
+            <span>
+              검색어 <b>“{query}”</b>
+            </span>
+          )}
+        </div>
+      </section>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {loading ? (
+        <Loading />
+      ) : pageItems.length === 0 ? (
+        <Empty text="조건에 맞는 분리배출 가이드가 없습니다." />
+      ) : (
+        <>
+          <div className="guide-list">
+            {pageItems.map((item) => (
+              <article className="guide" key={item.id}>
+                <div className="guide-head">
+                  <div>
+                    <small>{item.wasteItem}</small>
+                    <h3>{item.summary}</h3>
+                  </div>
+                  <button className="btn small" onClick={() => show(item)}>
+                    수정
+                  </button>
+                </div>
+                <div className="guide-cols">
+                  <div>
+                    <b>배출 방법</b>
+                    <p>{item.method}</p>
+                  </div>
+                  <div>
+                    <b>주의사항</b>
+                    <p>{item.caution || "-"}</p>
+                  </div>
+                </div>
+                <div className="chips">
+                  {item.checks.map((check) => (
+                    <span key={check}>{check}</span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="pagination-bar">
+            <div className="pagination-summary">
+              {totalPages > 0 ? `${page} / ${totalPages} 페이지` : "0 페이지"}
+            </div>
+
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹ 이전
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`page-btn ${pageNumber === page ? "active" : ""}`}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              <button
+                className="page-btn"
+                disabled={totalPages === 0 || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                다음 ›
               </button>
             </div>
-            <div className="guide-cols">
-              <div>
-                <b>배출 방법</b>
-                <p>{x.method}</p>
-              </div>
-              <div>
-                <b>주의사항</b>
-                <p>{x.caution}</p>
-              </div>
-            </div>
-            <div className="chips">
-              {x.checks.map((c) => (
-                <span key={c}>{c}</span>
-              ))}
-            </div>
-          </article>
-        ))}
-      </div>
+          </div>
+        </>
+      )}
+
       <Modal
         open={open}
         title={editing ? "분리배출 가이드 수정" : "분리배출 가이드 추가"}
@@ -2875,7 +3650,12 @@ function GuidesPage() {
             <button
               className="btn primary"
               onClick={save}
-              disabled={!wasteItem.trim() || !summary.trim()}
+              disabled={
+                !wasteItem.trim() ||
+                !summary.trim() ||
+                !method.trim() ||
+                !checks.trim()
+              }
             >
               저장
             </button>
@@ -2887,21 +3667,22 @@ function GuidesPage() {
             <span>품목</span>
             <input
               value={wasteItem}
-              onChange={(e) => setWasteItem(e.target.value)}
+              disabled={Boolean(editing)}
+              onChange={(event) => setWasteItem(event.target.value)}
             />
           </label>
           <label>
             <span>요약</span>
             <input
               value={summary}
-              onChange={(e) => setSummary(e.target.value)}
+              onChange={(event) => setSummary(event.target.value)}
             />
           </label>
           <label className="full">
             <span>배출 방법</span>
             <textarea
               value={method}
-              onChange={(e) => setMethod(e.target.value)}
+              onChange={(event) => setMethod(event.target.value)}
               rows={4}
             />
           </label>
@@ -2909,7 +3690,7 @@ function GuidesPage() {
             <span>주의사항</span>
             <textarea
               value={caution}
-              onChange={(e) => setCaution(e.target.value)}
+              onChange={(event) => setCaution(event.target.value)}
               rows={3}
             />
           </label>
@@ -2917,7 +3698,7 @@ function GuidesPage() {
             <span>체크리스트 (한 줄에 하나)</span>
             <textarea
               value={checks}
-              onChange={(e) => setChecks(e.target.value)}
+              onChange={(event) => setChecks(event.target.value)}
               rows={5}
             />
           </label>
@@ -2928,21 +3709,78 @@ function GuidesPage() {
 }
 
 function AiPage() {
+  const PAGE_SIZE = 20;
+
   const [items, setItems] = useState<AiCorrection[]>([]);
   const [filter, setFilter] = useState<ReviewStatus | "ALL">("PENDING");
+  const [page, setPage] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [selected, setSelected] = useState<AiCorrection | null>(null);
   const [memo, setMemo] = useState("");
-  const load = async () => setItems(await adminApi.corrections(filter));
-  useEffect(() => {
-    load();
-  }, [filter]);
-  async function review(ok: boolean) {
-    if (!selected) return;
-    await adminApi.reviewCorrection(selected.id, ok, memo);
-    setSelected(null);
-    setMemo("");
-    await load();
+  const [reviewing, setReviewing] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await adminApi.correctionPage({
+        status: filter,
+        page: page - 1,
+        size: PAGE_SIZE,
+      });
+
+      setItems(result.items);
+      setTotalElements(result.totalElements);
+      setTotalPages(result.totalPages);
+
+      if (result.totalPages > 0 && page > result.totalPages) {
+        setPage(result.totalPages);
+      }
+    } catch (err) {
+      setItems([]);
+      setTotalElements(0);
+      setTotalPages(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "AI 정정 검수 데이터를 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }
+
+  useEffect(() => {
+    void load();
+  }, [filter, page]);
+
+  async function review(ok: boolean) {
+    if (!selected || reviewing) return;
+
+    setReviewing(true);
+
+    try {
+      await adminApi.reviewCorrection(selected.id, ok, memo);
+      setSelected(null);
+      setMemo("");
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "AI 정정 검수 처리에 실패했습니다.",
+      );
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  const visiblePages = getPageBlock(page, totalPages);
 
   return (
     <>
@@ -2950,6 +3788,7 @@ function AiPage() {
         title="AI 사용자 정정 검수"
         subtitle="AI 원본 예측과 사용자 수정값을 비교하고 재학습 후보를 승인합니다."
       />
+
       <div className="notice">
         <b>사용자 정정값을 바로 학습하지 않습니다.</b>
         <span>
@@ -2957,85 +3796,153 @@ function AiPage() {
           재학습 후보로 사용합니다.
         </span>
       </div>
+
       <div className="tabs">
-        {(["PENDING", "APPROVED", "REJECTED", "ALL"] as const).map((x) => (
+        {(["PENDING", "APPROVED", "REJECTED", "ALL"] as const).map((status) => (
           <button
-            className={filter === x ? "active" : ""}
-            onClick={() => setFilter(x)}
-            key={x}
+            className={filter === status ? "active" : ""}
+            onClick={() => {
+              setFilter(status);
+              setPage(1);
+              setSelected(null);
+            }}
+            key={status}
           >
-            {x === "PENDING"
+            {status === "PENDING"
               ? "검수 대기"
-              : x === "APPROVED"
+              : status === "APPROVED"
                 ? "승인"
-                : x === "REJECTED"
+                : status === "REJECTED"
                   ? "거절"
                   : "전체"}
           </button>
         ))}
       </div>
-      {!items.length ? (
+
+      <div className="area-result-summary" style={{ marginBottom: 14 }}>
+        <span>
+          총 <b>{totalElements.toLocaleString()}</b>건
+        </span>
+        <span>페이지당 {PAGE_SIZE}건</span>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {loading ? (
+        <Loading />
+      ) : items.length === 0 ? (
         <Empty text="현재 필터에 해당하는 정정 데이터가 없습니다." />
       ) : (
-        <TableWrap>
-          <table>
-            <thead>
-              <tr>
-                <th>ImageLog</th>
-                <th>사용자</th>
-                <th>AI 원본</th>
-                <th>신뢰도</th>
-                <th>사용자 정정</th>
-                <th>상태</th>
-                <th>정정 시각</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((x) => (
-                <tr key={x.id}>
-                  <td>#{x.imageLogId}</td>
-                  <td>{x.userEmail}</td>
-                  <td>
-                    <b>{x.aiItem}</b>
-                  </td>
-                  <td>{(x.aiConfidence * 100).toFixed(1)}%</td>
-                  <td>
-                    <b className="ai-ok">{x.correctedItem}</b>
-                  </td>
-                  <td>
-                    <Badge value={x.status} />
-                  </td>
-                  <td>{x.correctedAt}</td>
-                  <td className="right">
-                    <button
-                      className="btn small"
-                      onClick={() => {
-                        setSelected(x);
-                        setMemo(x.memo ?? "");
-                      }}
-                    >
-                      {x.status === "PENDING" ? "검수하기" : "상세"}
-                    </button>
-                  </td>
+        <>
+          <TableWrap>
+            <table>
+              <thead>
+                <tr>
+                  <th>ImageLog</th>
+                  <th>사용자</th>
+                  <th>AI 원본</th>
+                  <th>신뢰도</th>
+                  <th>사용자 정정</th>
+                  <th>상태</th>
+                  <th>정정 시각</th>
+                  <th />
                 </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td>#{item.imageLogId}</td>
+                    <td>{item.userEmail}</td>
+                    <td>
+                      <b>{item.aiItem}</b>
+                    </td>
+                    <td>{(item.aiConfidence * 100).toFixed(1)}%</td>
+                    <td>
+                      <b className="ai-ok">{item.correctedItem}</b>
+                    </td>
+                    <td>
+                      <Badge value={item.status} />
+                    </td>
+                    <td>{item.correctedAt}</td>
+                    <td className="right">
+                      <button
+                        className="btn small"
+                        onClick={() => {
+                          setSelected(item);
+                          setMemo(item.memo ?? "");
+                        }}
+                      >
+                        {item.status === "PENDING" ? "검수하기" : "상세"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+
+          <div className="pagination-bar">
+            <div className="pagination-summary">
+              {totalPages > 0 ? `${page} / ${totalPages} 페이지` : "0 페이지"}
+            </div>
+
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹ 이전
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`page-btn ${pageNumber === page ? "active" : ""}`}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
               ))}
-            </tbody>
-          </table>
-        </TableWrap>
+
+              <button
+                className="page-btn"
+                disabled={totalPages === 0 || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                다음 ›
+              </button>
+            </div>
+          </div>
+        </>
       )}
+
       <Modal
         open={!!selected}
         title={`AI 정정 검수 · ImageLog #${selected?.imageLogId ?? ""}`}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          if (!reviewing) {
+            setSelected(null);
+          }
+        }}
         footer={
           selected?.status === "PENDING" ? (
             <>
-              <button className="btn danger" onClick={() => review(false)}>
-                거절
+              <button
+                className="btn danger"
+                disabled={reviewing}
+                onClick={() => void review(false)}
+              >
+                {reviewing ? "처리 중..." : "거절"}
               </button>
-              <button className="btn primary" onClick={() => review(true)}>
-                승인
+              <button
+                className="btn primary"
+                disabled={reviewing}
+                onClick={() => void review(true)}
+              >
+                {reviewing ? "처리 중..." : "승인"}
               </button>
             </>
           ) : (
@@ -3057,16 +3964,21 @@ function AiPage() {
               <div className="correct">
                 <span>사용자 정정</span>
                 <b>{selected.correctedItem}</b>
-                <small>관리자 확인 필요</small>
+                <small>
+                  {selected.status === "PENDING"
+                    ? "관리자 확인 필요"
+                    : `검수 상태: ${selected.status}`}
+                </small>
               </div>
             </div>
+
             <label>
               <span>검수 메모</span>
               <textarea
                 rows={4}
-                disabled={selected.status !== "PENDING"}
+                disabled={selected.status !== "PENDING" || reviewing}
                 value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                onChange={(event) => setMemo(event.target.value)}
                 placeholder="승인/거절 사유 또는 재학습 참고사항"
               />
             </label>
@@ -3078,92 +3990,263 @@ function AiPage() {
 }
 
 function PublicDataPage() {
+  const PAGE_SIZE = 20;
+
   const [items, setItems] = useState<SyncLog[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const load = async () => setItems(await adminApi.syncLogs());
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await adminApi.syncLogPage({
+        page: page - 1,
+        size: PAGE_SIZE,
+      });
+
+      setItems(result.items);
+      setTotalElements(result.totalElements);
+      setTotalPages(result.totalPages);
+
+      if (result.totalPages > 0 && page > result.totalPages) {
+        setPage(result.totalPages);
+      }
+    } catch (err) {
+      setItems([]);
+      setTotalElements(0);
+      setTotalPages(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "공공데이터 동기화 이력을 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [page]);
+
   async function sync() {
     setSyncing(true);
-    await adminApi.syncPublicData();
-    await load();
-    setSyncing(false);
+
+    try {
+      await adminApi.syncPublicData();
+
+      if (page === 1) {
+        await load();
+      } else {
+        setPage(1);
+      }
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "공공데이터 동기화에 실패했습니다.",
+      );
+    } finally {
+      setSyncing(false);
+    }
   }
+
+  const visiblePages = getPageBlock(page, totalPages);
+
   return (
     <>
       <PageHeader
         title="공공데이터 동기화"
         subtitle="생활폐기물 배출정보와 수거구역 데이터를 수동 동기화하고 결과를 확인합니다."
         action={
-          <button className="btn primary" onClick={sync} disabled={syncing}>
+          <button
+            className="btn primary"
+            onClick={() => void sync()}
+            disabled={syncing}
+          >
             {syncing ? "동기화 중..." : "↻ 지금 동기화"}
           </button>
         }
       />
+
       <div className="notice">
         <b>공공데이터 → SmartRecycle 내부 도메인 변환</b>
         <span>
           외부 원문을 그대로 노출하지 않고 수거구역, 일정, 품목 체계와 매핑해
-          사용자에게 제공합니다.
+          사용자에게 제공합니다. 원본 세부 규칙은 보존하고 관리자 화면에서만
+          읽기 편한 단위로 표시합니다.
         </span>
       </div>
-      <TableWrap>
-        <table>
-          <thead>
-            <tr>
-              <th>데이터 소스</th>
-              <th>상태</th>
-              <th>추가</th>
-              <th>갱신</th>
-              <th>실패</th>
-              <th>실행 시각</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((x) => (
-              <tr key={x.id}>
-                <td>
-                  <b>{x.source}</b>
-                </td>
-                <td>
-                  <Badge value={x.status} />
-                </td>
-                <td>{x.inserted}</td>
-                <td>{x.updated}</td>
-                <td>{x.failed}</td>
-                <td>{x.at}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableWrap>
+
+      <div className="area-result-summary" style={{ marginBottom: 14 }}>
+        <span>
+          동기화 이력 <b>{totalElements.toLocaleString()}</b>건
+        </span>
+        <span>페이지당 {PAGE_SIZE}건</span>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {loading ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <Empty text="공공데이터 동기화 이력이 없습니다." />
+      ) : (
+        <>
+          <TableWrap>
+            <table>
+              <thead>
+                <tr>
+                  <th>데이터 소스</th>
+                  <th>상태</th>
+                  <th>추가</th>
+                  <th>갱신</th>
+                  <th>실패</th>
+                  <th>실행 시각</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <b>{item.source}</b>
+                    </td>
+                    <td>
+                      <Badge value={item.status} />
+                    </td>
+                    <td>{item.inserted}</td>
+                    <td>{item.updated}</td>
+                    <td>{item.failed}</td>
+                    <td>{item.at}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+
+          <div className="pagination-bar">
+            <div className="pagination-summary">
+              {totalPages > 0 ? `${page} / ${totalPages} 페이지` : "0 페이지"}
+            </div>
+
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹ 이전
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`page-btn ${pageNumber === page ? "active" : ""}`}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              <button
+                className="page-btn"
+                disabled={totalPages === 0 || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                다음 ›
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
 
 function NotificationsPage() {
+  const PAGE_SIZE = 20;
+
   const [items, setItems] = useState<Notification[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [target, setTarget] = useState("전체 사용자");
   const [busy, setBusy] = useState(false);
+  const [cancelingId, setCancelingId] = useState<number | null>(null);
 
-  const load = async () => setItems(await adminApi.notifications());
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await adminApi.notificationPage({
+        page: page - 1,
+        size: PAGE_SIZE,
+      });
+
+      setItems(result.items);
+      setTotalElements(result.totalElements);
+      setTotalPages(result.totalPages);
+
+      if (result.totalPages > 0 && page > result.totalPages) {
+        setPage(result.totalPages);
+      }
+    } catch (err) {
+      setItems([]);
+      setTotalElements(0);
+      setTotalPages(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "알림 발송 이력을 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [page]);
 
   async function sendNow() {
     setBusy(true);
+
     try {
-      await adminApi.createNotification({ title, body, target });
+      await adminApi.createNotification({
+        title: title.trim(),
+        body: body.trim(),
+        target,
+      });
+
       setOpen(false);
       setTitle("");
       setBody("");
       setTarget("전체 사용자");
-      await load();
+
+      if (page === 1) {
+        await load();
+      } else {
+        setPage(1);
+      }
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "알림 발송에 실패했습니다.",
+      );
     } finally {
       setBusy(false);
     }
@@ -3174,11 +4257,25 @@ function NotificationsPage() {
       !window.confirm(
         "이 알림을 발송 취소할까요? 발송 이력은 보존되고 사용자 알림함에서는 노출되지 않습니다.",
       )
-    )
+    ) {
       return;
-    await adminApi.cancelNotification(id);
-    await load();
+    }
+
+    setCancelingId(id);
+
+    try {
+      await adminApi.cancelNotification(id);
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "알림 발송 취소에 실패했습니다.",
+      );
+    } finally {
+      setCancelingId(null);
+    }
   }
+
+  const visiblePages = getPageBlock(page, totalPages);
 
   return (
     <>
@@ -3191,6 +4288,7 @@ function NotificationsPage() {
           </button>
         }
       />
+
       <div className="notice">
         <b>현재는 인앱 알림 즉시 발송을 지원합니다.</b>
         <span>
@@ -3198,48 +4296,100 @@ function NotificationsPage() {
           화면에서는 제공하지 않습니다.
         </span>
       </div>
-      {!items.length ? (
+
+      <div className="area-result-summary" style={{ marginBottom: 14 }}>
+        <span>
+          발송 이력 <b>{totalElements.toLocaleString()}</b>건
+        </span>
+        <span>페이지당 {PAGE_SIZE}건</span>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {loading ? (
+        <Loading />
+      ) : items.length === 0 ? (
         <Empty text="발송된 알림이 없습니다." />
       ) : (
-        <TableWrap>
-          <table>
-            <thead>
-              <tr>
-                <th>제목</th>
-                <th>대상</th>
-                <th>상태</th>
-                <th>발송 시각</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((x) => (
-                <tr key={x.id}>
-                  <td>
-                    <b>{x.title}</b>
-                    <small>{x.body}</small>
-                  </td>
-                  <td>{x.target}</td>
-                  <td>
-                    <Badge value={x.status} />
-                  </td>
-                  <td>{x.sentAt ?? "-"}</td>
-                  <td className="right">
-                    {x.status === "SENT" && (
-                      <button
-                        className="btn small danger"
-                        onClick={() => cancel(x.id)}
-                      >
-                        발송 취소
-                      </button>
-                    )}
-                  </td>
+        <>
+          <TableWrap>
+            <table>
+              <thead>
+                <tr>
+                  <th>제목</th>
+                  <th>대상</th>
+                  <th>상태</th>
+                  <th>발송 시각</th>
+                  <th />
                 </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <b>{item.title}</b>
+                      <small>{item.body}</small>
+                    </td>
+                    <td>{item.target}</td>
+                    <td>
+                      <Badge value={item.status} />
+                    </td>
+                    <td>{item.sentAt ?? "-"}</td>
+                    <td className="right">
+                      {item.status === "SENT" && (
+                        <button
+                          className="btn small danger"
+                          onClick={() => void cancel(item.id)}
+                          disabled={cancelingId === item.id}
+                        >
+                          {cancelingId === item.id ? "처리 중..." : "발송 취소"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+
+          <div className="pagination-bar">
+            <div className="pagination-summary">
+              {totalPages > 0 ? `${page} / ${totalPages} 페이지` : "0 페이지"}
+            </div>
+
+            <div className="pagination">
+              <button
+                className="page-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹ 이전
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`page-btn ${pageNumber === page ? "active" : ""}`}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
               ))}
-            </tbody>
-          </table>
-        </TableWrap>
+
+              <button
+                className="page-btn"
+                disabled={totalPages === 0 || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                다음 ›
+              </button>
+            </div>
+          </div>
+        </>
       )}
+
       <Modal
         open={open}
         title="알림 즉시 발송"
@@ -3255,7 +4405,7 @@ function NotificationsPage() {
             </button>
             <button
               className="btn primary"
-              onClick={sendNow}
+              onClick={() => void sendNow()}
               disabled={busy || !title.trim() || !body.trim()}
             >
               {busy ? "발송 중..." : "즉시 발송"}
@@ -3268,7 +4418,7 @@ function NotificationsPage() {
             <span>제목</span>
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(event) => setTitle(event.target.value)}
               maxLength={120}
             />
           </label>
@@ -3277,13 +4427,16 @@ function NotificationsPage() {
             <textarea
               rows={5}
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(event) => setBody(event.target.value)}
               maxLength={2000}
             />
           </label>
           <label className="full">
             <span>대상</span>
-            <select value={target} onChange={(e) => setTarget(e.target.value)}>
+            <select
+              value={target}
+              onChange={(event) => setTarget(event.target.value)}
+            >
               <option value="전체 사용자">전체 활성 사용자</option>
               <option value="알림 수신 동의 사용자">
                 알림 수신 동의 사용자

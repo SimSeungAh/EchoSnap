@@ -1,4 +1,3 @@
-
 :root {
   font-family: Pretendard, "Noto Sans KR", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #17231e;
@@ -190,9 +189,14 @@ main{min-width:0}.topbar{height:72px;position:sticky;top:0;z-index:20;display:fl
   font-size:9px;
   font-weight:800
 }
-.page-btn:hover:not(:disabled){
+.page-btn:hover:not(:disabled):not(.active){
   border-color:#83aa9e;
   background:#f5faf8
+}
+.page-btn.active:hover{
+  border-color:var(--primary);
+  background:var(--primary);
+  color:#fff
 }
 .page-btn.active{
   border-color:var(--primary);
@@ -908,4 +912,13 @@ td small{
     flex:1
   }
 }
+
 \n\n/* General housing schedule - grouped region view */\n.schedule-group-guide{\n  display:flex;\n  align-items:center;\n  justify-content:space-between;\n  gap:16px;\n  margin:0 0 12px;\n  padding:13px 15px;\n  border:1px solid #dbe9e4;\n  border-radius:13px;\n  background:#f7fbf9;\n}\n.schedule-group-guide>div{\n  display:grid;\n  gap:3px;\n}\n.schedule-group-guide b{\n  color:#23443a;\n  font-size:13px;\n}\n.schedule-group-guide span{\n  color:#65766f;\n  font-size:12px;\n}\n.schedule-group-guide .schedule-group-count{\n  flex:none;\n  padding:6px 10px;\n  border-radius:999px;\n  background:#e7f3ef;\n  color:#2f6f60;\n  font-weight:800;\n}\n.schedule-coverage-table.grouped{\n  min-width:1240px;\n}\n.schedule-group-row>td{\n  vertical-align:middle;\n}\n.schedule-group-row>td:first-child{\n  min-width:190px;\n}\n.schedule-group-row>td:first-child>b,\n.schedule-group-row>td:first-child>small{\n  display:block;\n}\n.schedule-group-row>td:first-child>small{\n  margin-top:3px;\n}\n.schedule-preview-stack{\n  display:grid;\n  gap:5px;\n  min-width:245px;\n}\n.schedule-preview-line{\n  display:grid;\n  grid-template-columns:72px 1fr;\n  gap:8px;\n  align-items:center;\n  padding:5px 8px;\n  border:1px solid #e4ece8;\n  border-radius:8px;\n  background:#fbfdfc;\n}\n.schedule-preview-line b{\n  color:#23443a;\n  font-size:12px;\n}\n.schedule-preview-line span{\n  color:#4c5d56;\n  font-size:12px;\n}\n.schedule-pattern-summary{\n  display:grid;\n  gap:5px;\n  min-width:150px;\n}\n.schedule-pattern-summary strong{\n  color:#274a40;\n  font-size:13px;\n}\n.schedule-pattern-summary>span:not(.schedule-complete):not(.schedule-incomplete){\n  color:#697b74;\n  font-size:12px;\n}\n.schedule-incomplete{\n  display:inline-flex;\n  width:max-content;\n  align-items:center;\n  min-height:27px;\n  padding:0 10px;\n  border-radius:999px;\n  background:#fff2e8;\n  color:#a45a23;\n  font-size:11px;\n  font-weight:900;\n}\n.schedule-group-detail-row>td{\n  padding:14px !important;\n  background:#f6faf8;\n}\n.schedule-pattern-grid{\n  display:grid;\n  grid-template-columns:repeat(2,minmax(0,1fr));\n  gap:12px;\n}\n.schedule-pattern-card{\n  display:grid;\n  gap:11px;\n  padding:13px;\n  border:1px solid #dbe7e2;\n  border-radius:13px;\n  background:#fff;\n  box-shadow:0 3px 10px rgba(37,68,58,.05);\n}\n.schedule-pattern-card>header{\n  display:flex;\n  align-items:flex-start;\n  justify-content:space-between;\n  gap:10px;\n  padding-bottom:9px;\n  border-bottom:1px solid #edf2ef;\n}\n.schedule-pattern-card>header>div{\n  display:grid;\n  gap:3px;\n}\n.schedule-pattern-card>header b{\n  color:#23443a;\n  font-size:13px;\n}\n.schedule-pattern-card>header small{\n  color:#71817b;\n  font-size:11px;\n}\n.schedule-detail-note{\n  max-width:560px;\n  margin-top:4px !important;\n  padding-top:4px;\n  border-top:1px dashed #e4ece8;\n  color:#687a73 !important;\n  line-height:1.45;\n}\n.schedule-pattern-footer{\n  display:flex;\n  align-items:center;\n  justify-content:space-between;\n  gap:10px;\n  padding-top:2px;\n}\n@media (max-width:1100px){\n  .schedule-group-guide{\n    align-items:flex-start;\n    flex-direction:column;\n  }\n  .schedule-pattern-grid{\n    grid-template-columns:1fr;\n  }\n}\n
+
+.area-original-count {
+  white-space: nowrap;
+}
+
+.area-original-count b {
+  display: inline;
+}

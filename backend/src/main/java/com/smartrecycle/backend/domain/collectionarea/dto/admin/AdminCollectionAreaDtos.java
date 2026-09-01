@@ -19,6 +19,12 @@ public final class AdminCollectionAreaDtos {
   private AdminCollectionAreaDtos() {
   }
 
+  /**
+   * CollectionArea 실제 원본 데이터 응답.
+   *
+   * 상세 조회 / 등록 / 수정 / 활성화 응답과
+   * 지역 그룹 상세의 원본 목록에서 사용합니다.
+   */
   public record CollectionAreaResponse(
       Long id,
       CollectionAreaSourceType sourceType,
@@ -74,6 +80,49 @@ public final class AdminCollectionAreaDtos {
           area.getUpdatedAt()
       );
     }
+  }
+
+  /**
+   * 관리자 수거구역 목록용 지역 그룹.
+   *
+   * targetAreaName이 존재하면 targetAreaName을,
+   * 비어 있으면 areaName을 실제 표시 대상지역으로 사용합니다.
+   */
+  public record CollectionAreaGroupResponse(
+      String sido,
+      String sigungu,
+
+      String targetAreaName,
+
+      CollectionAreaSourceType sourceType,
+
+      boolean active,
+
+      long originalCount
+  ) {
+  }
+
+  /**
+   * 지역 그룹 상세.
+   *
+   * 관리자 목록에서는 지역 한 줄만 보여주고,
+   * 상세에서는 해당 그룹에 포함된 실제 CollectionArea 원본을
+   * 모두 확인할 수 있습니다.
+   */
+  public record CollectionAreaGroupDetailResponse(
+      String sido,
+      String sigungu,
+
+      String targetAreaName,
+
+      CollectionAreaSourceType sourceType,
+
+      boolean active,
+
+      long originalCount,
+
+      List<CollectionAreaResponse> originals
+  ) {
   }
 
   /**

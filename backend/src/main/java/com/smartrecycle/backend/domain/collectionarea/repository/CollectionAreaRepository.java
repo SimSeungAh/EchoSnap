@@ -51,10 +51,12 @@ public interface CollectionAreaRepository
   );
 
   /**
-   * 기존 관리자 수거구역 관리 화면용 검색.
+   * 기존 관리자 원본 단위 검색.
    *
-   * 이 API는 CollectionArea 원본 단위로 페이지네이션합니다.
-   * 수거구역 관리 화면에서는 그대로 사용합니다.
+   * 기존 코드와 다른 기능의 호환성을 위해 유지합니다.
+   *
+   * 새 수거구역 관리자 목록에서는
+   * searchAdminCollectionAreaGroups()를 사용합니다.
    */
   @Query(
       value = """
@@ -122,16 +124,179 @@ public interface CollectionAreaRepository
   );
 
   /**
-   * 배출 일정 관리 화면용 "실제 표시 지역" 그룹입니다.
+   * 수거구역 관리자 목록용 지역 그룹 조회.
    *
-   * 같은
+   * 실제 화면 표시 지역:
    *
-   * 시도 + 시군구 + 관리구역명 + 대상지역명 + 출처 + 활성상태
+   * target_area_name이 존재하면 target_area_name
+   * target_area_name이 없으면 area_name
    *
-   * 를 하나의 관리자 화면 행으로 묶습니다.
+   * 을 사용합니다.
    *
-   * 여기서는 CollectionArea 원본 개수를 페이지네이션하지 않고
-   * 먼저 지역 그룹 목록을 생성합니다.
+   * CollectionArea 원본을 페이지네이션한 후
+   * 프론트에서 묶는 것이 아니라,
+   * DB에서 지역 그룹을 먼저 생성한 후
+   * 그 그룹을 페이지네이션합니다.
+   */
+  @Query(
+      value = """
+          select
+              ca.sido as sido,
+              ca.sigungu as sigungu,
+              coalesce(
+                  nullif(trim(ca.target_area_name), ''),
+                  ca.area_name
+              ) as targetAreaName,
+              ca.source_type as sourceTypeName,
+              ca.active as active,
+              count(*) as originalCount
+          from collection_areas ca
+          where (
+              :sourceType is null
+              or ca.source_type = :sourceType
+          )
+          and (
+              :active is null
+              or ca.active = :active
+          )
+          and (
+              :keyword = ''
+              or lower(ca.sido)
+                  like lower(concat('%', :keyword, '%'))
+              or lower(ca.sigungu)
+                  like lower(concat('%', :keyword, '%'))
+              or lower(ca.area_name)
+                  like lower(concat('%', :keyword, '%'))
+              or lower(coalesce(ca.target_area_name, ''))
+                  like lower(concat('%', :keyword, '%'))
+              or lower(coalesce(ca.external_management_number, ''))
+                  like lower(concat('%', :keyword, '%'))
+          )
+          group by
+              ca.sido,
+              ca.sigungu,
+              coalesce(
+                  nullif(trim(ca.target_area_name), ''),
+                  ca.area_name
+              ),
+              ca.source_type,
+              ca.active
+          order by
+              ca.sido asc,
+              ca.sigungu asc,
+              coalesce(
+                  nullif(trim(ca.target_area_name), ''),
+                  ca.area_name
+              ) asc,
+              ca.source_type asc,
+              ca.active desc
+          """,
+      countQuery = """
+          select count(*)
+          from (
+              select
+                  ca.sido,
+                  ca.sigungu,
+                  coalesce(
+                      nullif(trim(ca.target_area_name), ''),
+                      ca.area_name
+                  ) as target_area_group,
+                  ca.source_type,
+                  ca.active
+              from collection_areas ca
+              where (
+                  :sourceType is null
+                  or ca.source_type = :sourceType
+              )
+              and (
+                  :active is null
+                  or ca.active = :active
+              )
+              and (
+                  :keyword = ''
+                  or lower(ca.sido)
+                      like lower(concat('%', :keyword, '%'))
+                  or lower(ca.sigungu)
+                      like lower(concat('%', :keyword, '%'))
+                  or lower(ca.area_name)
+                      like lower(concat('%', :keyword, '%'))
+                  or lower(coalesce(ca.target_area_name, ''))
+                      like lower(concat('%', :keyword, '%'))
+                  or lower(coalesce(ca.external_management_number, ''))
+                      like lower(concat('%', :keyword, '%'))
+              )
+              group by
+                  ca.sido,
+                  ca.sigungu,
+                  coalesce(
+                      nullif(trim(ca.target_area_name), ''),
+                      ca.area_name
+                  ),
+                  ca.source_type,
+                  ca.active
+          ) grouped_collection_areas
+          """,
+      nativeQuery = true
+  )
+  Page<AdminCollectionAreaGroupProjection>
+  searchAdminCollectionAreaGroups(
+      @Param("keyword")
+      String keyword,
+
+      @Param("sourceType")
+      String sourceType,
+
+      @Param("active")
+      Boolean active,
+
+      Pageable pageable
+  );
+
+  /**
+   * 수거구역 관리자 지역 그룹에 속하는
+   * 실제 CollectionArea 원본 전체 조회.
+   *
+   * 목록과 동일한 대상지역 계산 규칙을 사용합니다.
+   */
+  @Query(
+      value = """
+          select ca.*
+          from collection_areas ca
+          where ca.sido = :sido
+          and ca.sigungu = :sigungu
+          and coalesce(
+              nullif(trim(ca.target_area_name), ''),
+              ca.area_name
+          ) = :targetAreaName
+          and ca.source_type = :sourceType
+          and ca.active = :active
+          order by ca.id asc
+          """,
+      nativeQuery = true
+  )
+  List<CollectionArea>
+  findAllByAdminCollectionAreaGroup(
+      @Param("sido")
+      String sido,
+
+      @Param("sigungu")
+      String sigungu,
+
+      @Param("targetAreaName")
+      String targetAreaName,
+
+      @Param("sourceType")
+      String sourceType,
+
+      @Param("active")
+      boolean active
+  );
+
+  /**
+   * 기존 배출 일정 관리 화면용 지역 그룹입니다.
+   *
+   * 이 메서드는 기존 일정 관리 기능에서 사용하므로
+   * 이번 작업에서는 그대로 보존합니다.
    */
   @Query("""
             select
@@ -191,10 +356,10 @@ public interface CollectionAreaRepository
   );
 
   /**
-   * 지역 그룹 하나에 포함되는 실제 CollectionArea 원본 전체 조회.
+   * 기존 배출 일정 지역 그룹의
+   * 실제 CollectionArea 원본 조회.
    *
-   * 상세 화면에서는 이 데이터를 펼쳐서
-   * 배출 방법·장소 등 실제 차이를 확인합니다.
+   * 일정 관리 코드와의 호환성을 위해 그대로 유지합니다.
    */
   @Query("""
             select area
@@ -235,10 +400,25 @@ public interface CollectionAreaRepository
   );
 
   /**
-   * Spring Data interface projection.
-   *
-   * Entity를 전부 가져오지 않고
-   * 관리자 배출일정 목록에 필요한 지역 그룹 키만 조회합니다.
+   * 수거구역 관리자 목록용 Projection.
+   */
+  interface AdminCollectionAreaGroupProjection {
+
+    String getSido();
+
+    String getSigungu();
+
+    String getTargetAreaName();
+
+    String getSourceTypeName();
+
+    Boolean getActive();
+
+    Long getOriginalCount();
+  }
+
+  /**
+   * 기존 배출 일정 관리용 Projection.
    */
   interface AdminAreaGroupProjection {
 

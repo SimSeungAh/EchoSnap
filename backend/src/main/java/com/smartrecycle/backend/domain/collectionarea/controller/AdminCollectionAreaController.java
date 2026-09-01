@@ -13,7 +13,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,14 +40,18 @@ public class AdminCollectionAreaController {
       collectionAreaAdminService;
 
   /**
-   * 수거구역 목록 조회
+   * 수거구역 지역 그룹 목록 조회.
    */
   @GetMapping
   @Operation(
-      summary = "관리자 수거구역 목록 조회",
+      summary = "관리자 수거구역 지역 그룹 목록 조회",
       description = """
                     공공데이터 수거구역과
-                    관리자 직접 등록 수거구역을 조회합니다.
+                    관리자 직접 등록 수거구역을
+                    실제 화면 표시 지역 기준으로 그룹화하여 조회합니다.
+
+                    CollectionArea 원본 레코드가 아니라
+                    지역 그룹 단위로 페이지네이션합니다.
 
                     sourceType:
                     MOIS_HOUSEHOLD_WASTE / MANUAL
@@ -61,7 +64,7 @@ public class AdminCollectionAreaController {
   )
   public ApiResponse<
       PageResponse<
-          AdminCollectionAreaDtos.CollectionAreaResponse
+          AdminCollectionAreaDtos.CollectionAreaGroupResponse
           >
       >
   search(
@@ -85,14 +88,12 @@ public class AdminCollectionAreaController {
 
       @ParameterObject
       @PageableDefault(
-          size = 20,
-          sort = "updatedAt",
-          direction = Sort.Direction.DESC
+          size = 20
       )
       Pageable pageable
   ) {
     PageResponse<
-        AdminCollectionAreaDtos.CollectionAreaResponse
+        AdminCollectionAreaDtos.CollectionAreaGroupResponse
         > response =
         collectionAreaAdminService.search(
             userDetails.getUserId(),
@@ -103,17 +104,75 @@ public class AdminCollectionAreaController {
         );
 
     return ApiResponse.success(
-        "관리자 수거구역 목록 조회 성공",
+        "관리자 수거구역 지역 그룹 목록 조회 성공",
         response
     );
   }
 
   /**
-   * 상세 조회
+   * 수거구역 지역 그룹 상세 조회.
+   *
+   * 목록에서 한 줄로 묶인 지역의
+   * 실제 CollectionArea 원본들을 모두 반환합니다.
+   */
+  @GetMapping("/groups/detail")
+  @Operation(
+      summary = "관리자 수거구역 지역 그룹 상세 조회",
+      description = """
+                    수거구역 목록에서 한 줄로 표시된
+                    지역 그룹에 포함된 실제 CollectionArea 원본을
+                    모두 조회합니다.
+
+                    상세 화면에서는 각 원본의
+                    CollectionArea ID,
+                    관리번호,
+                    출처,
+                    지원 폐기물,
+                    기준일자,
+                    활성 상태 등을 확인할 수 있습니다.
+                    """
+  )
+  public ApiResponse<
+      AdminCollectionAreaDtos.CollectionAreaGroupDetailResponse
+      >
+  getGroup(
+      @AuthenticationPrincipal
+      CustomUserDetails userDetails,
+
+      @RequestParam
+      String sido,
+
+      @RequestParam
+      String sigungu,
+
+      @RequestParam
+      String targetAreaName,
+
+      @RequestParam
+      CollectionAreaSourceType sourceType,
+
+      @RequestParam
+      boolean active
+  ) {
+    return ApiResponse.success(
+        "관리자 수거구역 지역 그룹 상세 조회 성공",
+        collectionAreaAdminService.getGroup(
+            userDetails.getUserId(),
+            sido,
+            sigungu,
+            targetAreaName,
+            sourceType,
+            active
+        )
+    );
+  }
+
+  /**
+   * 실제 CollectionArea 원본 하나 상세 조회.
    */
   @GetMapping("/{collectionAreaId}")
   @Operation(
-      summary = "관리자 수거구역 상세 조회"
+      summary = "관리자 수거구역 원본 상세 조회"
   )
   public ApiResponse<
       AdminCollectionAreaDtos.CollectionAreaResponse
@@ -126,7 +185,7 @@ public class AdminCollectionAreaController {
       Long collectionAreaId
   ) {
     return ApiResponse.success(
-        "관리자 수거구역 상세 조회 성공",
+        "관리자 수거구역 원본 상세 조회 성공",
         collectionAreaAdminService.get(
             userDetails.getUserId(),
             collectionAreaId
@@ -135,7 +194,7 @@ public class AdminCollectionAreaController {
   }
 
   /**
-   * 수거구역 직접 추가
+   * 수거구역 직접 추가.
    */
   @PostMapping
   @Operation(
@@ -168,7 +227,7 @@ public class AdminCollectionAreaController {
   }
 
   /**
-   * MANUAL 수거구역 수정
+   * MANUAL 수거구역 수정.
    */
   @PutMapping("/{collectionAreaId}")
   @Operation(
@@ -206,7 +265,7 @@ public class AdminCollectionAreaController {
   }
 
   /**
-   * 비활성화
+   * 비활성화.
    */
   @PatchMapping(
       "/{collectionAreaId}/deactivate"
@@ -234,7 +293,7 @@ public class AdminCollectionAreaController {
   }
 
   /**
-   * 다시 활성화
+   * 다시 활성화.
    */
   @PatchMapping(
       "/{collectionAreaId}/activate"
@@ -262,7 +321,7 @@ public class AdminCollectionAreaController {
   }
 
   /**
-   * 기존 공공데이터 동기화
+   * 기존 공공데이터 동기화.
    */
   @PostMapping(
       "/public-data/sync"

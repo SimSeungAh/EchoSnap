@@ -1,14 +1,11 @@
 package com.smartrecycle.backend.domain.user.dto.admin;
 
-import com.smartrecycle.backend.domain.apartment.entity.Apartment;
 import com.smartrecycle.backend.domain.residence.entity.Residence;
 import com.smartrecycle.backend.domain.user.entity.ResidenceType;
 import com.smartrecycle.backend.domain.user.entity.Role;
 import com.smartrecycle.backend.domain.user.entity.User;
 import com.smartrecycle.backend.domain.user.entity.UserStatus;
 import jakarta.validation.constraints.NotNull;
-
-import java.time.LocalDateTime;
 
 public final class AdminUserDtos {
 
@@ -24,55 +21,12 @@ public final class AdminUserDtos {
       ResidenceType residenceType,
       String residenceName,
       String address,
-      boolean notificationEnabled,
-      boolean locationEnabled,
-      boolean onboardingCompleted,
-      LocalDateTime createdAt,
-      LocalDateTime updatedAt
+      String createdAt
   ) {
 
     public static UserResponse from(
         User user
     ) {
-      String residenceName = null;
-      String address = null;
-
-      if (
-          user.getResidenceType()
-              == ResidenceType.MANAGED_COMPLEX
-      ) {
-        Apartment apartment =
-            user.getApartment();
-
-        if (apartment != null) {
-          residenceName =
-              apartment.getName();
-
-          address =
-              apartment.getRoadAddress();
-        }
-      }
-
-      if (
-          user.getResidenceType()
-              == ResidenceType.GENERAL_HOUSING
-      ) {
-        Residence residence =
-            user.getResidence();
-
-        if (residence != null) {
-          residenceName =
-              resolveResidenceName(
-                  residence
-              );
-
-          address =
-              resolveResidenceAddress(
-                  residence
-              );
-        }
-      }
-
       return new UserResponse(
           user.getId(),
           user.getEmail(),
@@ -80,74 +34,139 @@ public final class AdminUserDtos {
           user.getRole(),
           user.getStatus(),
           user.getResidenceType(),
-          residenceName,
-          address,
-          user.isNotificationEnabled(),
-          user.isLocationEnabled(),
-          user.isOnboardingCompleted(),
-          user.getCreatedAt(),
-          user.getUpdatedAt()
+          resolveResidenceName(user),
+          resolveAddress(user),
+          user.getCreatedAt() == null
+              ? null
+              : user.getCreatedAt().toString()
       );
     }
 
     private static String resolveResidenceName(
-        Residence residence
+        User user
     ) {
       if (
-          residence.getBuildingName() != null
-              && !residence
-              .getBuildingName()
-              .isBlank()
+          user.getResidenceType()
+              == ResidenceType.MANAGED_COMPLEX
+              && user.getApartment() != null
       ) {
-        return residence.getBuildingName();
+        return textOrDefault(
+            user.getApartment().getName(),
+            "공동주택"
+        );
       }
 
       if (
-          residence.getAdministrativeDong() != null
-              && !residence
-              .getAdministrativeDong()
-              .isBlank()
+          user.getResidenceType()
+              == ResidenceType.GENERAL_HOUSING
+              && user.getResidence() != null
       ) {
-        return residence
-            .getAdministrativeDong()
-            + " 일반주택";
+        Residence residence =
+            user.getResidence();
+
+        if (hasText(residence.getBuildingName())) {
+          return residence
+              .getBuildingName()
+              .trim();
+        }
+
+        return "일반주택";
       }
 
-      return "일반주택";
+      return "미설정";
     }
 
-    private static String resolveResidenceAddress(
-        Residence residence
+    private static String resolveAddress(
+        User user
     ) {
       if (
-          residence.getRoadAddress() != null
-              && !residence
-              .getRoadAddress()
-              .isBlank()
+          user.getResidenceType()
+              == ResidenceType.MANAGED_COMPLEX
+              && user.getApartment() != null
       ) {
-        return residence.getRoadAddress();
+        if (
+            hasText(
+                user.getApartment()
+                    .getRoadAddress()
+            )
+        ) {
+          return user.getApartment()
+              .getRoadAddress()
+              .trim();
+        }
+
+        if (
+            hasText(
+                user.getApartment()
+                    .getJibunAddress()
+            )
+        ) {
+          return user.getApartment()
+              .getJibunAddress()
+              .trim();
+        }
+
+        return "-";
       }
 
       if (
-          residence.getAddressName() != null
-              && !residence
-              .getAddressName()
-              .isBlank()
+          user.getResidenceType()
+              == ResidenceType.GENERAL_HOUSING
+              && user.getResidence() != null
       ) {
-        return residence.getAddressName();
+        Residence residence =
+            user.getResidence();
+
+        if (hasText(residence.getRoadAddress())) {
+          return residence
+              .getRoadAddress()
+              .trim();
+        }
+
+        if (hasText(residence.getJibunAddress())) {
+          return residence
+              .getJibunAddress()
+              .trim();
+        }
+
+        if (hasText(residence.getAddressName())) {
+          return residence
+              .getAddressName()
+              .trim();
+        }
+
+        return "-";
       }
 
-      return residence.getJibunAddress();
+      return "-";
+    }
+
+    private static String textOrDefault(
+        String value,
+        String defaultValue
+    ) {
+      if (!hasText(value)) {
+        return defaultValue;
+      }
+
+      return value.trim();
+    }
+
+    private static boolean hasText(
+        String value
+    ) {
+      return value != null
+          && !value.isBlank();
     }
   }
 
-  public record ChangeStatusRequest(
+  public record UpdateStatusRequest(
       @NotNull
       UserStatus status
   ) {
   }
 
-  public record ChangeRoleRequest(
+  public record UpdateRoleRequest(
       @NotNull
       Role role
   ) {
