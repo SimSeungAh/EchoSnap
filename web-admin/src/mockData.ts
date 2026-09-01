@@ -6,7 +6,7 @@ import type {
 export const initialUsers: User[] = [
   { id: 1, email: 'user1@smartrecycle.com', name: '김사용', role: 'USER', status: 'ACTIVE', residence: '스마트아파트', address: '부산광역시 부산진구 중앙대로 100', createdAt: '2026-08-02' },
   { id: 2, email: 'house@smartrecycle.com', name: '이주택', role: 'USER', status: 'ACTIVE', residence: '일반주택', address: '부산광역시 부산진구 부전동 123-4', createdAt: '2026-08-08' },
-  { id: 3, email: 'sleep@smartrecycle.com', name: '박휴면', role: 'USER', status: 'INACTIVE', residence: '센트럴 오피스텔', address: '부산광역시 부산진구 가야대로 55', createdAt: '2026-07-20' },
+  { id: 3, email: 'sleep@smartrecycle.com', name: '박휴면', role: 'USER', status: 'WITHDRAWN', residence: '센트럴 오피스텔', address: '부산광역시 부산진구 가야대로 55', createdAt: '2026-07-20' },
 ];
 
 export const initialResidences: Residence[] = [
@@ -57,8 +57,8 @@ export const initialSyncLogs: SyncLog[] = [
 ];
 
 export const initialNotifications: Notification[] = [
-  { id: 1, title: '오늘은 플라스틱 배출일이에요', body: '오후 6시부터 9시 사이에 지정된 장소에 배출해주세요.', target: '부전1동 A구역', status: 'SCHEDULED', at: '2026-08-31 17:30' },
-  { id: 2, title: '분리배출 일정이 갱신되었습니다', body: '내 거주지의 최신 배출 일정을 확인해주세요.', target: '전체 사용자', status: 'SENT', at: '2026-08-30 11:00' },
+  { id: 1, title: '오늘은 플라스틱 배출일이에요', body: '오후 6시부터 9시 사이에 지정된 장소에 배출해주세요.', target: '일반주택 사용자', status: 'SENT', sentAt: '2026-08-31 17:30' },
+  { id: 2, title: '분리배출 일정이 갱신되었습니다', body: '내 거주지의 최신 배출 일정을 확인해주세요.', target: '전체 사용자', status: 'SENT', sentAt: '2026-08-30 11:00' },
 ];
 
 export const initialDashboard: Dashboard = {
@@ -67,5 +67,5 @@ export const initialDashboard: Dashboard = {
   pendingResidences: initialResidences.filter(x => x.approval === 'PENDING').length,
   wasteItems: initialWasteItems.length,
   pendingAi: initialCorrections.filter(x => x.status === 'PENDING').length,
-  scheduledNotifications: initialNotifications.filter(x => x.status === 'SCHEDULED').length,
+  todayNotifications: initialNotifications.filter(x => x.status === 'SENT').length,
 };

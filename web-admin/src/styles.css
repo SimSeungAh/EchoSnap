@@ -67,3 +67,845 @@ main{min-width:0}.topbar{height:72px;position:sticky;top:0;z-index:20;display:fl
 @media(max-width:900px){.layout{display:block}.sidebar{position:fixed;left:0;top:0;width:260px;transform:translateX(-102%);transition:.2s}.sidebar.open{transform:translateX(0)}.backdrop{display:block;position:fixed;inset:0;z-index:25;border:0;background:rgba(5,20,14,.42)}.mobile-menu{display:block}.topbar{padding:0 16px}.content{padding:25px 16px 48px}.login{grid-template-columns:1fr}.login-hero{display:none}}
 @media(max-width:650px){.page-header{align-items:stretch;flex-direction:column}.stats{grid-template-columns:1fr 1fr}.toolbar{align-items:stretch;flex-direction:column}.search{width:100%}.form-grid,.guide-cols,.compare{grid-template-columns:1fr}.form-grid .full{grid-column:auto}.profile{display:none}.demo-pill{display:none}.compare>strong{text-align:center;transform:rotate(90deg)}.login-card{padding:25px 19px}}
 @media(max-width:430px){.stats{grid-template-columns:1fr}}
+
+/* Collection area management */
+.area-filter-panel{
+  margin-bottom:14px;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:var(--shadow)
+}
+.area-filter-grid{
+  display:grid;
+  grid-template-columns:minmax(320px,2.1fr) minmax(150px,.8fr) minmax(130px,.7fr) auto;
+  gap:9px;
+  align-items:end
+}
+.area-filter-grid label{
+  display:grid;
+  gap:5px
+}
+.area-filter-grid label>span{
+  color:#53625c;
+  font-size:9px;
+  font-weight:900
+}
+.area-filter-grid .search,
+.area-filter-grid select{
+  width:100%;
+  height:41px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:0 11px;
+  background:#fff;
+  outline:0;
+  font-size:10px
+}
+.area-filter-grid .search:focus,
+.area-filter-grid select:focus{
+  border-color:#7ab7a6;
+  box-shadow:0 0 0 3px rgba(15,118,110,.07)
+}
+.area-filter-actions{
+  display:flex;
+  gap:7px
+}
+.area-result-summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 14px;
+  margin-top:11px;
+  padding-top:10px;
+  border-top:1px solid #edf1ef;
+  color:var(--muted);
+  font-size:9px
+}
+.area-result-summary b{
+  color:#28443a
+}
+.area-table{
+  min-width:1180px
+}
+.area-table td{
+  max-width:260px
+}
+.area-target-text{
+  max-width:260px;
+  line-height:1.55;
+  word-break:keep-all
+}
+.waste-type-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px
+}
+.mini-chip,
+.source-chip{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:0 7px;
+  border-radius:999px;
+  background:#eef5f2;
+  color:#315b4d;
+  font-size:8px;
+  font-weight:900;
+  white-space:nowrap
+}
+.source-chip{
+  background:#edf4ff;
+  color:#315b8d
+}
+.source-chip.manual{
+  background:#fff6df;
+  color:#8a6519
+}
+.pagination-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:13px
+}
+.pagination-summary{
+  color:var(--muted);
+  font-size:9px
+}
+.pagination{
+  display:flex;
+  align-items:center;
+  gap:5px
+}
+.page-btn{
+  min-width:34px;
+  height:34px;
+  padding:0 10px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:#fff;
+  color:#46574f;
+  cursor:pointer;
+  font-size:9px;
+  font-weight:800
+}
+.page-btn:hover:not(:disabled){
+  border-color:#83aa9e;
+  background:#f5faf8
+}
+.page-btn.active{
+  border-color:var(--primary);
+  background:var(--primary);
+  color:#fff
+}
+.page-btn:disabled{
+  opacity:.42;
+  cursor:not-allowed
+}
+
+@media(max-width:900px){
+  .area-filter-grid{
+    grid-template-columns:1fr 1fr
+  }
+  .area-search-field{
+    grid-column:1/-1
+  }
+  .area-filter-actions{
+    justify-content:flex-end
+  }
+}
+
+@media(max-width:650px){
+  .area-filter-grid{
+    grid-template-columns:1fr
+  }
+  .area-search-field{
+    grid-column:auto
+  }
+  .area-filter-actions{
+    justify-content:stretch
+  }
+  .area-filter-actions .btn{
+    flex:1
+  }
+  .pagination-bar{
+    align-items:stretch;
+    flex-direction:column
+  }
+  .pagination{
+    overflow-x:auto;
+    padding-bottom:3px
+  }
+}
+
+
+/* Schedule management */
+.schedule-tabs{
+  margin-bottom:14px
+}
+
+.schedule-filter-panel,
+.apartment-schedule-selector,
+.selected-apartment-card{
+  margin-bottom:14px;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:var(--shadow)
+}
+
+.schedule-filter-grid{
+  display:grid;
+  grid-template-columns:minmax(320px,2fr) minmax(150px,.8fr) minmax(150px,.8fr) auto;
+  gap:9px;
+  align-items:end
+}
+
+.schedule-filter-grid label,
+.apartment-schedule-selector label{
+  display:grid;
+  gap:5px
+}
+
+.schedule-filter-grid label>span,
+.apartment-schedule-selector label>span{
+  color:#53625c;
+  font-size:9px;
+  font-weight:900
+}
+
+.schedule-filter-grid input,
+.schedule-filter-grid select,
+.apartment-schedule-selector input,
+.apartment-schedule-selector select{
+  width:100%;
+  height:41px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:0 11px;
+  background:#fff;
+  outline:0;
+  font-size:10px
+}
+
+.schedule-filter-actions{
+  display:flex;
+  gap:7px
+}
+
+.schedule-coverage-table{
+  min-width:1280px
+}
+
+.schedule-stack{
+  display:grid;
+  gap:6px;
+  min-width:330px
+}
+
+.schedule-row-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 9px;
+  border:1px solid #e4ece8;
+  border-radius:10px;
+  background:#fbfdfc
+}
+
+.schedule-row-card>div:first-child{
+  display:grid;
+  gap:2px
+}
+
+.schedule-row-card b{
+  color:#23443a;
+  font-size:9px
+}
+
+.schedule-row-card span{
+  color:#44564e;
+  font-size:9px
+}
+
+.schedule-row-card small{
+  margin:0;
+  color:var(--muted);
+  font-size:8px
+}
+
+.schedule-row-actions{
+  display:flex;
+  gap:5px
+}
+
+.schedule-none{
+  color:#9a6c50;
+  font-size:9px;
+  font-weight:900
+}
+
+.schedule-complete{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:0 8px;
+  border-radius:999px;
+  background:#e9f7ef;
+  color:#27714d;
+  font-size:8px;
+  font-weight:900
+}
+
+.missing-stack{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px
+}
+
+.missing-chip{
+  min-height:25px;
+  border:1px solid #efc7b8;
+  border-radius:999px;
+  padding:0 9px;
+  background:#fff5f0;
+  color:#a24c2f;
+  cursor:pointer;
+  font-size:8px;
+  font-weight:900
+}
+
+.missing-chip:hover{
+  background:#ffebe2
+}
+
+.form-help{
+  margin:0;
+  color:var(--muted);
+  font-size:9px;
+  line-height:1.55
+}
+
+.apartment-schedule-selector{
+  display:grid;
+  grid-template-columns:minmax(250px,1fr) minmax(360px,1.6fr) auto;
+  gap:10px;
+  align-items:end
+}
+
+.selected-apartment-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px
+}
+
+.selected-apartment-card>div{
+  display:grid;
+  gap:3px
+}
+
+.selected-apartment-card small{
+  color:var(--muted);
+  font-size:8px;
+  font-weight:900
+}
+
+.selected-apartment-card b{
+  color:#233f36;
+  font-size:12px
+}
+
+.selected-apartment-card span{
+  color:#60716a;
+  font-size:9px
+}
+
+@media(max-width:1000px){
+  .schedule-filter-grid,
+  .apartment-schedule-selector{
+    grid-template-columns:1fr 1fr
+  }
+
+  .schedule-search-field{
+    grid-column:1/-1
+  }
+}
+
+@media(max-width:650px){
+  .schedule-filter-grid,
+  .apartment-schedule-selector{
+    grid-template-columns:1fr
+  }
+
+  .schedule-search-field{
+    grid-column:auto
+  }
+
+  .schedule-filter-actions{
+    justify-content:stretch
+  }
+
+  .schedule-filter-actions .btn{
+    flex:1
+  }
+
+  .selected-apartment-card{
+    align-items:flex-start;
+    flex-direction:column
+  }
+}
+
+/* =========================================================
+   SmartRecycle Admin readability scale
+   Desktop 관리자 화면 가독성 개선
+   ========================================================= */
+
+html{
+  font-size:16px;
+}
+
+body{
+  font-size:14px;
+  line-height:1.55;
+}
+
+/* Sidebar */
+.brand b{
+  font-size:17px;
+}
+.brand small{
+  font-size:11px;
+  letter-spacing:.12em;
+}
+.nav-label{
+  font-size:11px;
+}
+.nav-item{
+  min-height:46px;
+  font-size:14px;
+}
+.nav-icon{
+  font-size:17px;
+}
+
+/* Top bar */
+.top-left b{
+  font-size:15px;
+}
+.top-left small,
+.profile small{
+  font-size:12px;
+}
+.profile b{
+  font-size:13px;
+}
+.demo-pill{
+  font-size:11px;
+  padding:6px 10px;
+}
+
+/* Page titles */
+.page-header h1{
+  font-size:28px;
+}
+.page-header p{
+  font-size:14px;
+}
+.eyebrow{
+  font-size:11px;
+}
+
+/* Buttons */
+.btn{
+  min-height:42px;
+  padding:0 15px;
+  font-size:13px;
+}
+.btn.small{
+  min-height:35px;
+  padding:0 11px;
+  font-size:12px;
+}
+.icon-btn{
+  width:36px;
+  height:36px;
+}
+
+/* Dashboard */
+.stat>div{
+  font-size:12px;
+}
+.stat>strong{
+  font-size:29px;
+}
+.stat>small{
+  font-size:11px;
+}
+.panel h2{
+  font-size:16px;
+}
+.todo-list b{
+  font-size:13px;
+}
+.todo-list span{
+  font-size:12px;
+}
+.flow span{
+  font-size:12px;
+}
+
+/* Tables */
+th{
+  padding:13px 15px;
+  font-size:12px;
+  line-height:1.4;
+}
+td{
+  padding:15px 15px;
+  font-size:13px;
+  line-height:1.5;
+}
+td b{
+  font-size:13px;
+}
+td small{
+  margin-top:4px;
+  font-size:11px;
+  line-height:1.5;
+}
+
+/* Status / chips */
+.badge{
+  min-height:26px;
+  padding:0 9px;
+  font-size:11px;
+}
+.mini-chip,
+.source-chip{
+  min-height:25px;
+  padding:0 9px;
+  font-size:11px;
+}
+.chips span{
+  font-size:11px;
+}
+
+/* Notice & help text */
+.notice{
+  gap:5px;
+  padding:14px 16px;
+}
+.notice b{
+  font-size:13px;
+}
+.notice span{
+  font-size:12px;
+}
+.muted{
+  font-size:12px;
+}
+
+/* Guides */
+.guide-head small{
+  font-size:11px;
+}
+.guide-head h3{
+  font-size:16px;
+}
+.guide-cols b{
+  font-size:12px;
+}
+.guide-cols p{
+  font-size:13px;
+}
+
+/* Tabs */
+.tabs button{
+  min-height:35px;
+  padding:0 14px;
+  font-size:12px;
+}
+
+/* AI review */
+.compare span,
+.compare small{
+  font-size:12px;
+}
+.compare b{
+  font-size:16px;
+}
+
+/* Settings */
+.settings b{
+  font-size:13px;
+}
+.settings span{
+  font-size:12px;
+}
+.settings code{
+  font-size:11px;
+}
+.security ul{
+  font-size:12px;
+}
+
+/* Modal */
+.modal-head h2{
+  font-size:18px;
+}
+.form-grid label>span,
+.modal-body>label>span,
+.login-card label>span{
+  font-size:12px;
+}
+.form-grid input,
+.form-grid select,
+.form-grid textarea,
+.modal-body textarea,
+.login-card input{
+  min-height:44px;
+  padding:10px 12px;
+  font-size:14px;
+}
+.info span{
+  font-size:11px;
+}
+.info b{
+  font-size:13px;
+}
+.form-help{
+  font-size:12px;
+}
+
+/* Loading / Empty */
+.state-card{
+  font-size:13px;
+}
+
+/* Login */
+.login-hero p{
+  font-size:14px;
+}
+.hero-tags span{
+  font-size:11px;
+}
+.login-card>p{
+  font-size:13px;
+}
+.demo{
+  font-size:12px;
+}
+.error-box{
+  padding:11px 12px;
+  font-size:12px;
+}
+
+/* Collection area filters */
+.area-filter-grid label>span,
+.schedule-filter-grid label>span,
+.apartment-schedule-selector label>span{
+  font-size:12px;
+}
+.area-filter-grid .search,
+.area-filter-grid select,
+.schedule-filter-grid input,
+.schedule-filter-grid select,
+.apartment-schedule-selector input,
+.apartment-schedule-selector select{
+  height:44px;
+  font-size:14px;
+}
+.area-result-summary,
+.pagination-summary{
+  font-size:12px;
+}
+.page-btn{
+  min-width:38px;
+  height:38px;
+  padding:0 11px;
+  font-size:12px;
+}
+.area-target-text{
+  font-size:13px;
+}
+
+/* Schedule management */
+.schedule-row-card{
+  padding:10px 11px;
+}
+.schedule-row-card b{
+  font-size:12px;
+}
+.schedule-row-card span{
+  font-size:12px;
+}
+.schedule-row-card small{
+  font-size:11px;
+}
+.schedule-none{
+  font-size:12px;
+}
+.schedule-complete{
+  min-height:27px;
+  padding:0 10px;
+  font-size:11px;
+}
+.missing-chip{
+  min-height:29px;
+  padding:0 10px;
+  font-size:11px;
+}
+.selected-apartment-card small{
+  font-size:11px;
+}
+.selected-apartment-card b{
+  font-size:15px;
+}
+.selected-apartment-card span{
+  font-size:12px;
+}
+
+/* Slightly roomier cards */
+.stat,
+.panel,
+.guide,
+.settings article{
+  padding:19px;
+}
+
+/* Keep dense tables readable on smaller screens */
+@media(max-width:1100px){
+  th{
+    font-size:11px;
+  }
+
+  td{
+    font-size:12px;
+  }
+
+  td small{
+    font-size:10px;
+  }
+}
+
+@media(max-width:650px){
+  body{
+    font-size:13px;
+  }
+
+  .page-header h1{
+    font-size:24px;
+  }
+
+  .page-header p{
+    font-size:13px;
+  }
+
+  .btn{
+    font-size:12px;
+  }
+}
+
+
+
+/* =========================================================
+   User management
+   ========================================================= */
+
+.user-filter-panel{
+  margin-bottom:14px;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:var(--shadow)
+}
+
+.user-filter-row{
+  display:grid;
+  grid-template-columns:minmax(360px,1fr) auto;
+  gap:10px;
+  align-items:end
+}
+
+.user-search-field{
+  display:grid;
+  gap:5px
+}
+
+.user-search-field>span{
+  color:#53625c;
+  font-size:12px;
+  font-weight:900
+}
+
+.user-search-field input{
+  width:100%;
+  height:44px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:0 12px;
+  background:#fff;
+  outline:0;
+  font-size:14px
+}
+
+.user-search-field input:focus{
+  border-color:#7ab7a6;
+  box-shadow:0 0 0 3px rgba(15,118,110,.07)
+}
+
+.user-filter-actions{
+  display:flex;
+  gap:7px
+}
+
+.users-table{
+  min-width:1050px
+}
+
+.user-address{
+  max-width:310px;
+  line-height:1.5;
+  word-break:keep-all
+}
+
+.user-admin-warning{
+  display:grid;
+  gap:4px;
+  margin-top:4px;
+  padding:12px 13px;
+  border:1px solid #f0d4b8;
+  border-radius:11px;
+  background:#fff9f2
+}
+
+.user-admin-warning b{
+  color:#8e5827;
+  font-size:12px
+}
+
+.user-admin-warning span{
+  color:#755c47;
+  font-size:12px;
+  line-height:1.55
+}
+
+@media(max-width:700px){
+  .user-filter-row{
+    grid-template-columns:1fr
+  }
+
+  .user-filter-actions{
+    justify-content:stretch
+  }
+
+  .user-filter-actions .btn{
+    flex:1
+  }
+}
+\n\n/* General housing schedule - grouped region view */\n.schedule-group-guide{\n  display:flex;\n  align-items:center;\n  justify-content:space-between;\n  gap:16px;\n  margin:0 0 12px;\n  padding:13px 15px;\n  border:1px solid #dbe9e4;\n  border-radius:13px;\n  background:#f7fbf9;\n}\n.schedule-group-guide>div{\n  display:grid;\n  gap:3px;\n}\n.schedule-group-guide b{\n  color:#23443a;\n  font-size:13px;\n}\n.schedule-group-guide span{\n  color:#65766f;\n  font-size:12px;\n}\n.schedule-group-guide .schedule-group-count{\n  flex:none;\n  padding:6px 10px;\n  border-radius:999px;\n  background:#e7f3ef;\n  color:#2f6f60;\n  font-weight:800;\n}\n.schedule-coverage-table.grouped{\n  min-width:1240px;\n}\n.schedule-group-row>td{\n  vertical-align:middle;\n}\n.schedule-group-row>td:first-child{\n  min-width:190px;\n}\n.schedule-group-row>td:first-child>b,\n.schedule-group-row>td:first-child>small{\n  display:block;\n}\n.schedule-group-row>td:first-child>small{\n  margin-top:3px;\n}\n.schedule-preview-stack{\n  display:grid;\n  gap:5px;\n  min-width:245px;\n}\n.schedule-preview-line{\n  display:grid;\n  grid-template-columns:72px 1fr;\n  gap:8px;\n  align-items:center;\n  padding:5px 8px;\n  border:1px solid #e4ece8;\n  border-radius:8px;\n  background:#fbfdfc;\n}\n.schedule-preview-line b{\n  color:#23443a;\n  font-size:12px;\n}\n.schedule-preview-line span{\n  color:#4c5d56;\n  font-size:12px;\n}\n.schedule-pattern-summary{\n  display:grid;\n  gap:5px;\n  min-width:150px;\n}\n.schedule-pattern-summary strong{\n  color:#274a40;\n  font-size:13px;\n}\n.schedule-pattern-summary>span:not(.schedule-complete):not(.schedule-incomplete){\n  color:#697b74;\n  font-size:12px;\n}\n.schedule-incomplete{\n  display:inline-flex;\n  width:max-content;\n  align-items:center;\n  min-height:27px;\n  padding:0 10px;\n  border-radius:999px;\n  background:#fff2e8;\n  color:#a45a23;\n  font-size:11px;\n  font-weight:900;\n}\n.schedule-group-detail-row>td{\n  padding:14px !important;\n  background:#f6faf8;\n}\n.schedule-pattern-grid{\n  display:grid;\n  grid-template-columns:repeat(2,minmax(0,1fr));\n  gap:12px;\n}\n.schedule-pattern-card{\n  display:grid;\n  gap:11px;\n  padding:13px;\n  border:1px solid #dbe7e2;\n  border-radius:13px;\n  background:#fff;\n  box-shadow:0 3px 10px rgba(37,68,58,.05);\n}\n.schedule-pattern-card>header{\n  display:flex;\n  align-items:flex-start;\n  justify-content:space-between;\n  gap:10px;\n  padding-bottom:9px;\n  border-bottom:1px solid #edf2ef;\n}\n.schedule-pattern-card>header>div{\n  display:grid;\n  gap:3px;\n}\n.schedule-pattern-card>header b{\n  color:#23443a;\n  font-size:13px;\n}\n.schedule-pattern-card>header small{\n  color:#71817b;\n  font-size:11px;\n}\n.schedule-detail-note{\n  max-width:560px;\n  margin-top:4px !important;\n  padding-top:4px;\n  border-top:1px dashed #e4ece8;\n  color:#687a73 !important;\n  line-height:1.45;\n}\n.schedule-pattern-footer{\n  display:flex;\n  align-items:center;\n  justify-content:space-between;\n  gap:10px;\n  padding-top:2px;\n}\n@media (max-width:1100px){\n  .schedule-group-guide{\n    align-items:flex-start;\n    flex-direction:column;\n  }\n  .schedule-pattern-grid{\n    grid-template-columns:1fr;\n  }\n}\n

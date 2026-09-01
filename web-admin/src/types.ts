@@ -1,4 +1,4 @@
-export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'WITHDRAWN';
 export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface User {
@@ -22,13 +22,35 @@ export interface Residence {
   approval: ReviewStatus;
 }
 
+export type CollectionAreaSourceType =
+  | 'MOIS_HOUSEHOLD_WASTE'
+  | 'MANUAL';
+
+export type CollectionWasteType =
+  | 'LIFE_WASTE'
+  | 'FOOD_WASTE'
+  | 'RECYCLABLE';
+
 export interface CollectionArea {
   id: number;
   name: string;
+  sido?: string;
   district: string;
   dongs: string[];
+  targetAreaName?: string;
+  externalManagementNumber?: string;
+  wasteTypes?: CollectionWasteType[];
   active: boolean;
   updatedAt: string;
+  sourceType?: CollectionAreaSourceType;
+}
+
+export interface PageResult<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 }
 
 export interface Schedule {
@@ -39,6 +61,75 @@ export interface Schedule {
   time: string;
   note: string;
   active: boolean;
+}
+
+
+export type CollectionScheduleSourceType =
+  | 'PUBLIC_DATA'
+  | 'ADMIN_APPROVED_REPORT';
+
+export interface GeneralHousingSchedule {
+  id: number;
+  collectionAreaId: number;
+  collectionAreaName: string;
+  wasteType: CollectionWasteType;
+  sourceType: CollectionScheduleSourceType;
+  day: string;
+  startTime?: string;
+  endTime?: string;
+  time: string;
+  note: string;
+}
+
+export interface AreaScheduleCoverage {
+  collectionAreaId: number;
+  collectionAreaName: string;
+  areaSourceType: CollectionAreaSourceType;
+  externalManagementNumber?: string;
+  sido: string;
+  district: string;
+  targetAreaName?: string;
+  active: boolean;
+  supportedWasteTypes: CollectionWasteType[];
+  schedules: GeneralHousingSchedule[];
+  missingWasteTypes: CollectionWasteType[];
+}
+
+
+export interface WasteTypeCoverage {
+  wasteType: CollectionWasteType;
+  supportedAreaCount: number;
+  registeredAreaCount: number;
+  missingAreaCount: number;
+}
+
+export interface AreaScheduleGroupCoverage {
+  representativeCollectionAreaId: number;
+  collectionAreaName: string;
+  sido: string;
+  district: string;
+  targetAreaName?: string;
+  areaSourceType: CollectionAreaSourceType;
+  active: boolean;
+  collectionAreaCount: number;
+  allSchedulesRegistered: boolean;
+  supportedWasteTypes: CollectionWasteType[];
+  wasteTypeCoverage: WasteTypeCoverage[];
+  areas: AreaScheduleCoverage[];
+}
+
+export interface ApartmentSchedule {
+  id: number;
+  apartmentId: number;
+  apartmentName: string;
+  wasteItemId: number;
+  wasteItemName: string;
+  dayOfWeek: string;
+  startTime?: string;
+  endTime?: string;
+  alwaysAvailable: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WasteItem {
@@ -86,8 +177,8 @@ export interface Notification {
   title: string;
   body: string;
   target: string;
-  status: 'DRAFT' | 'SCHEDULED' | 'SENT';
-  at?: string;
+  status: 'SENT' | 'CANCELLED';
+  sentAt?: string;
 }
 
 export interface Dashboard {
@@ -96,5 +187,5 @@ export interface Dashboard {
   pendingResidences: number;
   wasteItems: number;
   pendingAi: number;
-  scheduledNotifications: number;
+  todayNotifications: number;
 }

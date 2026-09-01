@@ -36,10 +36,6 @@ public interface ImageLogRepository
   /**
    * 실제 저장 파일명과 로그인 사용자를 함께 사용하여
    * 자신의 이미지 파일만 조회합니다.
-   *
-   * storedFileName이 UUID라 하더라도
-   * UUID를 알고 있다는 사실만으로
-   * 파일 접근 권한을 부여하지 않습니다.
    */
   Optional<ImageLog>
   findByStoredFileNameAndUserId(
@@ -48,8 +44,29 @@ public interface ImageLogRepository
   );
 
   /**
-   * 관리자 검수 화면에서
-   * 상태별 이미지 로그를 조회합니다.
+   * 관리자 검수 화면:
+   * 특정 검수 상태 데이터 조회
+   *
+   * 최신 사용자 정정부터 표시합니다.
+   */
+  Page<ImageLog>
+  findAllByReviewStatusOrderByUserCorrectedAtDesc(
+      ImageReviewStatus reviewStatus,
+      Pageable pageable
+  );
+
+  /**
+   * 관리자 검수 화면:
+   * 상태와 관계없이 사용자 정정이 존재하는
+   * 전체 데이터를 조회합니다.
+   */
+  Page<ImageLog>
+  findAllByUserCorrectedWasteItemIsNotNullOrderByUserCorrectedAtDesc(
+      Pageable pageable
+  );
+
+  /**
+   * 기존 관리자 대시보드 호환용입니다.
    */
   Page<ImageLog>
   findAllByReviewStatusOrderByCreatedAtAsc(
