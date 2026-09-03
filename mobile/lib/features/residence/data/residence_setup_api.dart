@@ -16,22 +16,17 @@ class ApartmentSearchItem {
   final String? roadAddress;
   final String? jibunAddress;
 
-  factory ApartmentSearchItem.fromJson(
-      Map<String, dynamic> json,
-      ) {
+  factory ApartmentSearchItem.fromJson(Map<String, dynamic> json) {
     return ApartmentSearchItem(
       id: json['id'] as int? ?? 0,
       name: json['name'] as String? ?? '',
-      roadAddress:
-      json['roadAddress'] as String?,
-      jibunAddress:
-      json['jibunAddress'] as String?,
+      roadAddress: json['roadAddress'] as String?,
+      jibunAddress: json['jibunAddress'] as String?,
     );
   }
 
   String get displayAddress {
-    if (roadAddress != null &&
-        roadAddress!.isNotEmpty) {
+    if (roadAddress != null && roadAddress!.isNotEmpty) {
       return roadAddress!;
     }
 
@@ -52,6 +47,8 @@ class AddressSearchItem {
     required this.administrativeDong,
     required this.legalDongCode,
     required this.administrativeDongCode,
+    required this.buildingManagementNumber,
+    required this.apartment,
     required this.latitude,
     required this.longitude,
   });
@@ -69,56 +66,38 @@ class AddressSearchItem {
   final String? administrativeDong;
   final String? legalDongCode;
   final String? administrativeDongCode;
+  final String? buildingManagementNumber;
+  final bool apartment;
 
   final double latitude;
   final double longitude;
 
-  factory AddressSearchItem.fromJson(
-      Map<String, dynamic> json,
-      ) {
+  factory AddressSearchItem.fromJson(Map<String, dynamic> json) {
     return AddressSearchItem(
-      addressName:
-      json['addressName'] as String? ?? '',
-      roadAddress:
-      json['roadAddress'] as String?,
-      jibunAddress:
-      json['jibunAddress'] as String?,
-      buildingName:
-      json['buildingName'] as String?,
-      zoneNo:
-      json['zoneNo'] as String?,
-      sido:
-      json['sido'] as String? ?? '',
-      sigungu:
-      json['sigungu'] as String? ?? '',
-      legalDong:
-      json['legalDong'] as String?,
-      administrativeDong:
-      json['administrativeDong'] as String?,
-      legalDongCode:
-      json['legalDongCode'] as String?,
-      administrativeDongCode:
-      json['administrativeDongCode'] as String?,
-      latitude: _toDouble(
-        json['latitude'],
-      ),
-      longitude: _toDouble(
-        json['longitude'],
-      ),
+      addressName: json['addressName'] as String? ?? '',
+      roadAddress: json['roadAddress'] as String?,
+      jibunAddress: json['jibunAddress'] as String?,
+      buildingName: json['buildingName'] as String?,
+      zoneNo: json['zoneNo'] as String?,
+      sido: json['sido'] as String? ?? '',
+      sigungu: json['sigungu'] as String? ?? '',
+      legalDong: json['legalDong'] as String?,
+      administrativeDong: json['administrativeDong'] as String?,
+      legalDongCode: json['legalDongCode'] as String?,
+      administrativeDongCode: json['administrativeDongCode'] as String?,
+      buildingManagementNumber: json['buildingManagementNumber'] as String?,
+      apartment: json['apartment'] as bool? ?? false,
+      latitude: _toDouble(json['latitude']),
+      longitude: _toDouble(json['longitude']),
     );
   }
 
-  static double _toDouble(
-      dynamic value,
-      ) {
+  static double _toDouble(dynamic value) {
     if (value is num) {
       return value.toDouble();
     }
 
-    return double.tryParse(
-      value?.toString() ?? '',
-    ) ??
-        0;
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Map<String, dynamic> toSaveRequest() {
@@ -131,24 +110,20 @@ class AddressSearchItem {
       'sido': sido,
       'sigungu': sigungu,
       'legalDong': legalDong,
-      'administrativeDong':
-      administrativeDong,
+      'administrativeDong': administrativeDong,
       'legalDongCode': legalDongCode,
-      'administrativeDongCode':
-      administrativeDongCode,
+      'administrativeDongCode': administrativeDongCode,
       'latitude': latitude,
       'longitude': longitude,
     };
   }
 
   String get displayAddress {
-    if (roadAddress != null &&
-        roadAddress!.isNotEmpty) {
+    if (roadAddress != null && roadAddress!.isNotEmpty) {
       return roadAddress!;
     }
 
-    if (jibunAddress != null &&
-        jibunAddress!.isNotEmpty) {
+    if (jibunAddress != null && jibunAddress!.isNotEmpty) {
       return jibunAddress!;
     }
 
@@ -156,12 +131,8 @@ class AddressSearchItem {
   }
 }
 
-class ResidenceSetupApiException
-    implements Exception {
-  const ResidenceSetupApiException(
-      this.message, {
-        this.unauthorized = false,
-      });
+class ResidenceSetupApiException implements Exception {
+  const ResidenceSetupApiException(this.message, {this.unauthorized = false});
 
   final String message;
   final bool unauthorized;
@@ -175,21 +146,15 @@ class ResidenceSetupApiException
 class ResidenceSetupApi {
   ResidenceSetupApi._();
 
-  static Future<List<ApartmentSearchItem>>
-  searchApartments(
-      String keyword,
-      ) async {
+  static Future<List<ApartmentSearchItem>> searchApartments(
+    String keyword,
+  ) async {
     final http.Response response;
 
     try {
-      response =
-      await AuthenticatedApiClient.get(
+      response = await AuthenticatedApiClient.get(
         '/api/apartments',
-        queryParameters: {
-          'keyword': keyword.trim(),
-          'page': '0',
-          'size': '20',
-        },
+        queryParameters: {'keyword': keyword.trim(), 'page': '0', 'size': '20'},
       );
     } on AuthenticatedApiException catch (exception) {
       throw ResidenceSetupApiException(
@@ -198,13 +163,9 @@ class ResidenceSetupApi {
       );
     }
 
-    final Map<String, dynamic> body =
-    _decodeResponse(response);
+    final Map<String, dynamic> body = _decodeResponse(response);
 
-    _validateSuccess(
-      response,
-      body,
-    );
+    _validateSuccess(response, body);
 
     final dynamic data = body['data'];
 
@@ -220,27 +181,17 @@ class ResidenceSetupApi {
 
     return content
         .whereType<Map<String, dynamic>>()
-        .map(
-      ApartmentSearchItem.fromJson,
-    )
+        .map(ApartmentSearchItem.fromJson)
         .toList();
   }
 
-  static Future<List<AddressSearchItem>>
-  searchAddresses(
-      String query,
-      ) async {
+  static Future<List<AddressSearchItem>> searchAddresses(String query) async {
     final http.Response response;
 
     try {
-      response =
-      await AuthenticatedApiClient.get(
+      response = await AuthenticatedApiClient.get(
         '/api/addresses/search',
-        queryParameters: {
-          'query': query.trim(),
-          'page': '1',
-          'size': '10',
-        },
+        queryParameters: {'query': query.trim(), 'page': '1', 'size': '10'},
       );
     } on AuthenticatedApiException catch (exception) {
       throw ResidenceSetupApiException(
@@ -249,13 +200,9 @@ class ResidenceSetupApi {
       );
     }
 
-    final Map<String, dynamic> body =
-    _decodeResponse(response);
+    final Map<String, dynamic> body = _decodeResponse(response);
 
-    _validateSuccess(
-      response,
-      body,
-    );
+    _validateSuccess(response, body);
 
     final dynamic data = body['data'];
 
@@ -265,76 +212,38 @@ class ResidenceSetupApi {
 
     return data
         .whereType<Map<String, dynamic>>()
-        .map(
-      AddressSearchItem.fromJson,
-    )
+        .map(AddressSearchItem.fromJson)
         .toList();
   }
 
-  static Future<void> saveApartment(
-      int apartmentId,
-      ) async {
-    await _patch(
-      '/api/users/me/apartment',
-      {
-        'apartmentId': apartmentId,
-      },
-    );
+  static Future<void> saveApartment(int apartmentId) async {
+    await _patch('/api/users/me/apartment', {'apartmentId': apartmentId});
   }
 
-  static Future<void> saveResidence(
-      AddressSearchItem address, {
-        required String residenceType,
-      }) async {
-    final Map<String, dynamic> requestBody =
-    address.toSaveRequest();
+  static Future<void> requestApartmentRegistration(
+    AddressSearchItem address, {
+    required String apartmentName,
+  }) async {
+    final String? buildingNumber = address.buildingManagementNumber;
 
-    requestBody['generalHousingType'] =
-        _toGeneralHousingType(
-          residenceType,
-        );
+    if (buildingNumber == null || buildingNumber.length != 25) {
+      throw const ResidenceSetupApiException(
+        '이 주소의 건물 식별정보를 확인할 수 없습니다. 잠시 후 다시 검색해주세요.',
+      );
+    }
 
-    await _patch(
-      '/api/users/me/residence',
-      requestBody,
-    );
-  }
-
-  static String _toGeneralHousingType(
-      String residenceType,
-      ) {
-    return switch (residenceType) {
-      '단독주택' => 'DETACHED_HOUSE',
-      '다가구주택' => 'MULTI_FAMILY_HOUSE',
-      '연립주택' => 'ROW_HOUSE',
-      '다세대주택' => 'MULTI_UNIT_HOUSE',
-      '집 앞이나 지정된 지역에 배출해요' => 'UNSPECIFIED',
-      _ => throw const ResidenceSetupApiException(
-        '지원하지 않는 일반주택 유형입니다.',
-      ),
-    };
-  }
-
-  static Future<void> completeOnboarding() async {
-    await _patch(
-      '/api/users/me/onboarding',
-      {
-        'completed': true,
-      },
-    );
-  }
-
-  static Future<void> _patch(
-      String path,
-      Map<String, dynamic> requestBody,
-      ) async {
     final http.Response response;
-
     try {
-      response =
-      await AuthenticatedApiClient.patch(
-        path,
-        body: requestBody,
+      response = await AuthenticatedApiClient.post(
+        '/api/apartments/temporary',
+        body: {
+          'name': apartmentName.trim(),
+          'roadAddress': address.roadAddress ?? address.addressName,
+          'jibunAddress': address.jibunAddress,
+          'buildingManagementNumber': buildingNumber,
+          'latitude': address.latitude,
+          'longitude': address.longitude,
+        },
       );
     } on AuthenticatedApiException catch (exception) {
       throw ResidenceSetupApiException(
@@ -343,34 +252,72 @@ class ResidenceSetupApi {
       );
     }
 
-    final Map<String, dynamic> body =
-    _decodeResponse(response);
-
-    _validateSuccess(
-      response,
-      body,
-    );
+    final Map<String, dynamic> body = _decodeResponse(response);
+    _validateSuccess(response, body);
   }
 
-  static Map<String, dynamic> _decodeResponse(
-      http.Response response,
-      ) {
+  static Future<void> saveResidence(
+    AddressSearchItem address, {
+    required String residenceType,
+  }) async {
+    final Map<String, dynamic> requestBody = address.toSaveRequest();
+
+    requestBody['generalHousingType'] = _toGeneralHousingType(residenceType);
+
+    await _patch('/api/users/me/residence', requestBody);
+  }
+
+  static String _toGeneralHousingType(String residenceType) {
+    return switch (residenceType) {
+      '단독주택' => 'DETACHED_HOUSE',
+      '다가구주택' => 'MULTI_FAMILY_HOUSE',
+      '연립주택' => 'ROW_HOUSE',
+      '다세대주택' => 'MULTI_UNIT_HOUSE',
+      '집 앞이나 지정된 지역에 배출해요' => 'UNSPECIFIED',
+      _ => throw const ResidenceSetupApiException('지원하지 않는 일반주택 유형입니다.'),
+    };
+  }
+
+  static Future<void> completeOnboarding() async {
+    await _patch('/api/users/me/onboarding', {'completed': true});
+  }
+
+  static Future<void> _patch(
+    String path,
+    Map<String, dynamic> requestBody,
+  ) async {
+    final http.Response response;
+
     try {
-      return jsonDecode(
-        utf8.decode(response.bodyBytes),
-      ) as Map<String, dynamic>;
+      response = await AuthenticatedApiClient.patch(path, body: requestBody);
+    } on AuthenticatedApiException catch (exception) {
+      throw ResidenceSetupApiException(
+        exception.message,
+        unauthorized: exception.unauthorized,
+      );
+    }
+
+    final Map<String, dynamic> body = _decodeResponse(response);
+
+    _validateSuccess(response, body);
+  }
+
+  static Map<String, dynamic> _decodeResponse(http.Response response) {
+    try {
+      return jsonDecode(utf8.decode(response.bodyBytes))
+          as Map<String, dynamic>;
     } catch (_) {
       throw ResidenceSetupApiException(
         '서버 응답을 처리할 수 없습니다. '
-            '(HTTP ${response.statusCode})',
+        '(HTTP ${response.statusCode})',
       );
     }
   }
 
   static void _validateSuccess(
-      http.Response response,
-      Map<String, dynamic> body,
-      ) {
+    http.Response response,
+    Map<String, dynamic> body,
+  ) {
     if (response.statusCode == 401) {
       throw const ResidenceSetupApiException(
         '로그인이 만료되었습니다.',
@@ -378,16 +325,12 @@ class ResidenceSetupApi {
       );
     }
 
-    final String message =
-        body['message'] as String? ??
-            '요청 처리 중 오류가 발생했습니다.';
+    final String message = body['message'] as String? ?? '요청 처리 중 오류가 발생했습니다.';
 
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
         body['success'] != true) {
-      throw ResidenceSetupApiException(
-        message,
-      );
+      throw ResidenceSetupApiException(message);
     }
   }
 }

@@ -23,6 +23,8 @@ public record AddressSearchResultResponse(
     String administrativeDong,
     String legalDongCode,
     String administrativeDongCode,
+    String buildingManagementNumber,
+    boolean apartment,
     BigDecimal latitude,
     BigDecimal longitude
 ) {
@@ -78,6 +80,8 @@ public record AddressSearchResultResponse(
         address != null
             ? blankToNull(address.hCode())
             : null,
+        null,
+        false,
         toCoordinate(document.y()),
         toCoordinate(document.x())
     );

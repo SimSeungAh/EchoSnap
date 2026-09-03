@@ -1,6 +1,8 @@
 package com.echosnap.backend.domain.address.service;
 
 import com.echosnap.backend.domain.address.client.KakaoAddressClient;
+import com.echosnap.backend.domain.address.client.JusoAddressClient;
+import com.echosnap.backend.domain.address.dto.external.JusoAddressSearchResponse;
 import com.echosnap.backend.domain.address.dto.external.KakaoAddressSearchResponse;
 import com.echosnap.backend.domain.address.dto.external.KakaoCoordinateRegionResponse;
 import com.echosnap.backend.domain.address.dto.response.AddressSearchResultResponse;
@@ -13,7 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +39,8 @@ public class AddressSearchService {
 
   private final KakaoAddressClient
       kakaoAddressClient;
+
+  private final JusoAddressClient jusoAddressClient;
 
   /**
    * 카카오 주소 검색 API를 호출하고
@@ -72,18 +79,73 @@ public class AddressSearchService {
         );
       }
 
-      return response.documents()
+      List<AddressSearchResultResponse> results = response.documents()
           .stream()
           .map(
               this::toAddressSearchResult
           )
           .toList();
 
+      return enrichWithBuildingInformation(
+          query.trim(),
+          size,
+          results
+      );
+
     } catch (RestClientException e) {
       throw new CustomException(
           ErrorCode.ADDRESS_SEARCH_API_ERROR
       );
     }
+  }
+
+  /**
+   * 도로명주소 API가 설정된 경우 건물관리번호와 공동주택 여부를 보완합니다.
+   * 보조 API 장애가 주소 검색 전체를 막지 않도록 기존 결과를 그대로 반환합니다.
+   */
+  private List<AddressSearchResultResponse> enrichWithBuildingInformation(
+      String query,
+      int size,
+      List<AddressSearchResultResponse> results
+  ) {
+    if (!jusoAddressClient.isConfigured() || results.isEmpty()) {
+      return results;
+    }
+
+    try {
+      Map<String, JusoAddressSearchResponse.Juso> byRoadAddress =
+          jusoAddressClient.search(query, size).stream()
+              .filter(item -> hasText(firstNonBlank(item.roadAddrPart1(), item.roadAddr())))
+              .collect(Collectors.toMap(
+                  item -> normalizeAddress(firstNonBlank(item.roadAddrPart1(), item.roadAddr())),
+                  Function.identity(),
+                  (first, ignored) -> first
+              ));
+
+      return results.stream().map(result -> {
+        JusoAddressSearchResponse.Juso match = byRoadAddress.get(
+            normalizeAddress(result.roadAddress())
+        );
+        if (match == null) {
+          return result;
+        }
+        return new AddressSearchResultResponse(
+            result.addressName(), result.roadAddress(), result.jibunAddress(),
+            firstNonBlank(result.buildingName(), match.bdNm()), result.zoneNo(),
+            result.sido(), result.sigungu(), result.legalDong(),
+            result.administrativeDong(), result.legalDongCode(),
+            result.administrativeDongCode(), match.bdMgtSn(),
+            match.isApartment(), result.latitude(), result.longitude()
+        );
+      }).toList();
+    } catch (RuntimeException exception) {
+      log.warn("도로명주소 건물정보 보완 실패. query={}", query, exception);
+      return results;
+    }
+  }
+
+  private String normalizeAddress(String value) {
+    return value == null ? "" : value.replaceAll("\\s+", "").trim();
   }
 
   /**
@@ -187,6 +249,8 @@ public class AddressSearchService {
         administrativeDong,
         base.legalDongCode(),
         administrativeDongCode,
+        base.buildingManagementNumber(),
+        base.apartment(),
         base.latitude(),
         base.longitude()
     );
