@@ -9,12 +9,16 @@ class ApartmentSearchItem {
     required this.name,
     required this.roadAddress,
     required this.jibunAddress,
+    required this.latitude,
+    required this.longitude,
   });
 
   final int id;
   final String name;
   final String? roadAddress;
   final String? jibunAddress;
+  final double latitude;
+  final double longitude;
 
   factory ApartmentSearchItem.fromJson(Map<String, dynamic> json) {
     return ApartmentSearchItem(
@@ -22,6 +26,8 @@ class ApartmentSearchItem {
       name: json['name'] as String? ?? '',
       roadAddress: json['roadAddress'] as String?,
       jibunAddress: json['jibunAddress'] as String?,
+      latitude: AddressSearchItem._toDouble(json['latitude']),
+      longitude: AddressSearchItem._toDouble(json['longitude']),
     );
   }
 
@@ -220,17 +226,11 @@ class ResidenceSetupApi {
     await _patch('/api/users/me/apartment', {'apartmentId': apartmentId});
   }
 
-  static Future<void> requestApartmentRegistration(
+  static Future<bool> requestApartmentRegistration(
     AddressSearchItem address, {
     required String apartmentName,
   }) async {
     final String? buildingNumber = address.buildingManagementNumber;
-
-    if (buildingNumber == null || buildingNumber.length != 25) {
-      throw const ResidenceSetupApiException(
-        '이 주소의 건물 식별정보를 확인할 수 없습니다. 잠시 후 다시 검색해주세요.',
-      );
-    }
 
     final http.Response response;
     try {
@@ -254,6 +254,9 @@ class ResidenceSetupApi {
 
     final Map<String, dynamic> body = _decodeResponse(response);
     _validateSuccess(response, body);
+
+    final dynamic data = body['data'];
+    return data is Map<String, dynamic> && data['status'] == 'APPROVED';
   }
 
   static Future<void> saveResidence(

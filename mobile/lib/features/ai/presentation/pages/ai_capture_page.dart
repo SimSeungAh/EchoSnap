@@ -717,6 +717,19 @@ class _AiCapturePageState extends State<AiCapturePage> {
                     height: 50,
                     child: OutlinedButton.icon(
                       onPressed: _isBusy ? null : _takePhoto,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
+                        side: const BorderSide(
+                          color: AppTheme.primaryColor,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
                       icon: const Icon(Icons.camera_alt_outlined),
                       label: const Text('촬영하기'),
                     ),

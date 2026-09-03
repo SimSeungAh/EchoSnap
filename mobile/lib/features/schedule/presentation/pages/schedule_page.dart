@@ -21,6 +21,7 @@ class _SchedulePageState extends State<SchedulePage> {
 
   ManagedComplexScheduleData? _managedComplexData;
   List<ConfirmableScheduleReport> _confirmableReports = const [];
+  List<ConfirmableScheduleReport> _myReports = const [];
 
   bool _isLoading = true;
 
@@ -48,12 +49,14 @@ class _SchedulePageState extends State<SchedulePage> {
 
       ManagedComplexScheduleData? managedComplexData;
       List<ConfirmableScheduleReport> confirmableReports = const [];
+      List<ConfirmableScheduleReport> myReports = const [];
 
       if (user.residenceType == 'GENERAL_HOUSING') {
         generalHousingData = await ScheduleApi.getGeneralHousingSchedule();
       } else if (user.residenceType == 'MANAGED_COMPLEX') {
         managedComplexData = await ScheduleApi.getManagedComplexSchedule();
         confirmableReports = await ScheduleApi.getConfirmableReports();
+        myReports = await ScheduleApi.getMyReports();
       }
 
       if (!mounted) {
@@ -65,6 +68,7 @@ class _SchedulePageState extends State<SchedulePage> {
         _generalHousingData = generalHousingData;
         _managedComplexData = managedComplexData;
         _confirmableReports = confirmableReports;
+        _myReports = myReports;
         _isLoading = false;
       });
     } on CurrentUserApiException catch (exception) {
@@ -112,131 +116,49 @@ class _SchedulePageState extends State<SchedulePage> {
     });
   }
 
-  Future<void> _reportManagedSchedule() async {
-    final WasteSearchItem? wasteItem = await Navigator.push<WasteSearchItem>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const WasteSearchPage(selectionMode: true),
-      ),
-    );
-    if (wasteItem == null || !mounted) return;
+  Future<void> _reportManagedSchedule({ManagedScheduleItem? existing}) async {
+    final WasteSearchItem? selectedWasteItem = existing == null
+        ? await Navigator.push<WasteSearchItem>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const WasteSearchPage(selectionMode: true),
+            ),
+          )
+        : null;
+    if ((existing == null && selectedWasteItem == null) || !mounted) return;
+    final int wasteItemId = existing?.wasteItemId ?? selectedWasteItem!.id;
+    final String wasteItemName = existing?.name ?? selectedWasteItem!.name;
 
-    ManagedScheduleItem? existing;
-    for (final item
-        in _managedComplexData?.items ?? const <ManagedScheduleItem>[]) {
-      if (item.wasteItemId == wasteItem.id) {
-        existing = item;
-        break;
+    if (existing == null) {
+      for (final item
+          in _managedComplexData?.items ?? const <ManagedScheduleItem>[]) {
+        if (item.wasteItemId == wasteItemId) {
+          existing = item;
+          break;
+        }
       }
     }
-    String day = 'MONDAY';
-    bool always = false;
-    final startController = TextEditingController(text: '18:00');
-    final endController = TextEditingController(text: '21:00');
-    final noteController = TextEditingController();
-
-    final bool? submitted = await showDialog<bool>(
+    final ManagedScheduleTime? current = existing?.schedules.isEmpty ?? true
+        ? null
+        : existing!.schedules.first;
+    final _ScheduleReportDraft? draft = await showDialog<_ScheduleReportDraft>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('${wasteItem.name} 일정 제보'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (existing != null)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text('기존 일정과 다른 내용을 제보하면 관리자 검토 후 반영됩니다.'),
-                  ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('상시 배출 가능'),
-                  value: always,
-                  onChanged: (value) => setDialogState(() => always = value),
-                ),
-                if (!always) ...[
-                  DropdownButtonFormField<String>(
-                    initialValue: day,
-                    decoration: const InputDecoration(labelText: '배출 요일'),
-                    items:
-                        const [
-                              ('MONDAY', '월요일'),
-                              ('TUESDAY', '화요일'),
-                              ('WEDNESDAY', '수요일'),
-                              ('THURSDAY', '목요일'),
-                              ('FRIDAY', '금요일'),
-                              ('SATURDAY', '토요일'),
-                              ('SUNDAY', '일요일'),
-                            ]
-                            .map(
-                              (entry) => DropdownMenuItem(
-                                value: entry.$1,
-                                child: Text(entry.$2),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (value) => day = value ?? day,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: startController,
-                    decoration: const InputDecoration(
-                      labelText: '시작 시간 (예: 18:00)',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: endController,
-                    decoration: const InputDecoration(
-                      labelText: '종료 시간 (예: 21:00)',
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  controller: noteController,
-                  maxLength: 1000,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: '제보 내용 (선택)',
-                    hintText: '관리사무소 공지 등 확인한 내용을 적어주세요.',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('취소'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('제보하기'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) =>
+          _ScheduleReportDialog(wasteItemName: wasteItemName, current: current),
     );
 
-    if (submitted != true || !mounted) {
-      startController.dispose();
-      endController.dispose();
-      noteController.dispose();
-      return;
-    }
+    if (draft == null || !mounted) return;
     try {
       await ScheduleApi.reportApartmentSchedule(
-        wasteItemId: wasteItem.id,
-        dayOfWeek: day,
-        startTime: startController.text.trim(),
-        endTime: endController.text.trim(),
-        alwaysAvailable: always,
+        wasteItemId: wasteItemId,
+        dayOfWeek: draft.day,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+        alwaysAvailable: draft.always,
         referenceScheduleId: existing == null || existing.schedules.isEmpty
             ? null
             : existing.schedules.first.scheduleId,
-        note: noteController.text.trim(),
+        note: draft.note,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -250,10 +172,6 @@ class _SchedulePageState extends State<SchedulePage> {
           context,
         ).showSnackBar(SnackBar(content: Text(exception.message)));
       }
-    } finally {
-      startController.dispose();
-      endController.dispose();
-      noteController.dispose();
     }
   }
 
@@ -286,7 +204,7 @@ class _SchedulePageState extends State<SchedulePage> {
         actions: [
           if (_user?.residenceType == 'MANAGED_COMPLEX')
             TextButton.icon(
-              onPressed: _reportManagedSchedule,
+              onPressed: () => _reportManagedSchedule(),
               icon: const Icon(Icons.add_rounded),
               label: const Text('일정 제보'),
             ),
@@ -465,6 +383,25 @@ class _SchedulePageState extends State<SchedulePage> {
             subtitle: '관리자 승인 일정과 주민 제보를 함께 확인해요',
           ),
 
+          if (data.items.isEmpty) ...[
+            const SizedBox(height: 18),
+            _FirstScheduleCard(onPressed: () => _reportManagedSchedule()),
+          ],
+
+          if (_myReports.isNotEmpty) ...[
+            const SizedBox(height: 26),
+            Text('내가 등록한 일정', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 6),
+            const Text('승인 전에도 같은 단지 주민에게 공유되어 확인을 받을 수 있어요.'),
+            const SizedBox(height: 12),
+            ..._myReports.map(
+              (report) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _MyScheduleReportCard(report: report),
+              ),
+            ),
+          ],
+
           if (_confirmableReports.isNotEmpty) ...[
             const SizedBox(height: 26),
             Text('이웃 주민의 새 제보', style: Theme.of(context).textTheme.titleLarge),
@@ -489,15 +426,309 @@ class _SchedulePageState extends State<SchedulePage> {
           const SizedBox(height: 12),
 
           if (data.items.isEmpty)
-            const _EmptyCard(message: '등록된 공동주택 배출 일정이 없습니다.')
+            const _EmptyCard(message: '아직 승인된 일정이 없습니다. 주민 제보를 기다리고 있어요.')
           else
             ...data.items.map((item) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _ManagedScheduleCard(item: item),
+                child: _ManagedScheduleCard(
+                  item: item,
+                  onCorrection: () => _reportManagedSchedule(existing: item),
+                ),
               );
             }),
         ],
+      ),
+    );
+  }
+}
+
+class _ScheduleReportDraft {
+  const _ScheduleReportDraft({
+    required this.day,
+    required this.startTime,
+    required this.endTime,
+    required this.always,
+    required this.note,
+  });
+
+  final String day;
+  final String startTime;
+  final String endTime;
+  final bool always;
+  final String note;
+}
+
+class _ScheduleReportDialog extends StatefulWidget {
+  const _ScheduleReportDialog({required this.wasteItemName, this.current});
+
+  final String wasteItemName;
+  final ManagedScheduleTime? current;
+
+  @override
+  State<_ScheduleReportDialog> createState() => _ScheduleReportDialogState();
+}
+
+class _ScheduleReportDialogState extends State<_ScheduleReportDialog> {
+  late String _day;
+  late bool _always;
+  late final TextEditingController _startController;
+  late final TextEditingController _endController;
+  final TextEditingController _placeController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _day = widget.current?.dayOfWeek ?? 'MONDAY';
+    _always = widget.current?.alwaysAvailable ?? false;
+    _startController = TextEditingController(
+      text: widget.current?.startTime ?? '18:00',
+    );
+    _endController = TextEditingController(
+      text: widget.current?.endTime ?? '21:00',
+    );
+  }
+
+  @override
+  void dispose() {
+    _startController.dispose();
+    _endController.dispose();
+    _placeController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final place = _placeController.text.trim();
+    final detail = _noteController.text.trim();
+    final note = [
+      if (place.isNotEmpty) '배출장소: $place',
+      if (detail.isNotEmpty) detail,
+    ].join('\n');
+    Navigator.pop(
+      context,
+      _ScheduleReportDraft(
+        day: _day,
+        startTime: _startController.text.trim(),
+        endTime: _endController.text.trim(),
+        always: _always,
+        note: note,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        '${widget.wasteItemName} 일정 ${widget.current == null ? '등록' : '정정 제보'}',
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.current != null)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('실제 일정이 다르다면 올바른 요일과 시간을 알려주세요.'),
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('상시 배출 가능'),
+              value: _always,
+              onChanged: (value) => setState(() => _always = value),
+            ),
+            if (!_always) ...[
+              DropdownButtonFormField<String>(
+                initialValue: _day,
+                decoration: const InputDecoration(labelText: '배출 요일'),
+                items:
+                    const [
+                          ('MONDAY', '월요일'),
+                          ('TUESDAY', '화요일'),
+                          ('WEDNESDAY', '수요일'),
+                          ('THURSDAY', '목요일'),
+                          ('FRIDAY', '금요일'),
+                          ('SATURDAY', '토요일'),
+                          ('SUNDAY', '일요일'),
+                        ]
+                        .map(
+                          (entry) => DropdownMenuItem(
+                            value: entry.$1,
+                            child: Text(entry.$2),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (value) => setState(() => _day = value ?? _day),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _startController,
+                decoration: const InputDecoration(
+                  labelText: '시작 시간 (예: 18:00)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _endController,
+                decoration: const InputDecoration(
+                  labelText: '종료 시간 (예: 21:00)',
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _placeController,
+              decoration: const InputDecoration(
+                labelText: '배출장소 (선택)',
+                hintText: '예: 101동 뒤 분리수거장',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              maxLength: 900,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '근거·메모 (선택)',
+                hintText: '관리사무소 공지 등 확인한 내용을 적어주세요.',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
+        ElevatedButton(onPressed: _submit, child: const Text('공유하기')),
+      ],
+    );
+  }
+}
+
+class _FirstScheduleCard extends StatelessWidget {
+  const _FirstScheduleCard({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.add_home_work_outlined,
+              size: 42,
+              color: AppTheme.primaryColor,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '우리 단지 첫 일정을 알려주세요',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '요일·시간·배출장소를 등록하면 같은 단지 주민들과 바로 공유됩니다.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('첫 일정 등록하기'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MyScheduleReportCard extends StatelessWidget {
+  const _MyScheduleReportCard({required this.report});
+  final ConfirmableScheduleReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final schedule = report.alwaysAvailable
+        ? '상시 배출 가능'
+        : '${_dayLabel(report.dayOfWeek)} · ${_timeRange(report.startTime, report.endTime, false)}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    report.wasteItemName,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                _ReportTrustBadge(report: report),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(schedule),
+            if (_hasText(report.note)) ...[
+              const SizedBox(height: 6),
+              Text(report.note!),
+            ],
+            const SizedBox(height: 9),
+            Text(
+              '맞아요 ${report.confirmedCount} · 달라요 ${report.differentCount}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportTrustBadge extends StatelessWidget {
+  const _ReportTrustBadge({required this.report});
+  final ConfirmableScheduleReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    late final String label;
+    late final Color color;
+    if (report.status == 'APPROVED') {
+      label = '관리자 확인';
+      color = AppTheme.primaryColor;
+    } else if (report.differentCount > report.confirmedCount) {
+      label = '확인 필요';
+      color = Colors.orange.shade800;
+    } else if (report.confirmedCount >= 2) {
+      label = '주민 확인';
+      color = Colors.blue.shade700;
+    } else {
+      label = '확인 전';
+      color = Colors.grey.shade700;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -527,6 +758,8 @@ class _ResidentReportCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 6),
+            _ReportTrustBadge(report: report),
+            const SizedBox(height: 6),
             Text(scheduleText),
             if (_hasText(report.note)) ...[
               const SizedBox(height: 6),
@@ -542,17 +775,29 @@ class _ResidentReportCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => onConfirm('DIFFERENT'),
+                    onPressed: report.canConfirm
+                        ? () => onConfirm('DIFFERENT')
+                        : null,
                     icon: const Icon(Icons.close_rounded),
-                    label: const Text('정보가 달라요'),
+                    label: Text(
+                      report.myConfirmationValue == 'DIFFERENT'
+                          ? '달라요 선택됨'
+                          : '정보가 달라요',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => onConfirm('CONFIRMED'),
+                    onPressed: report.canConfirm
+                        ? () => onConfirm('CONFIRMED')
+                        : null,
                     icon: const Icon(Icons.check_rounded),
-                    label: const Text('맞아요'),
+                    label: Text(
+                      report.myConfirmationValue == 'CONFIRMED'
+                          ? '맞아요 선택됨'
+                          : '맞아요',
+                    ),
                   ),
                 ),
               ],
@@ -766,9 +1011,10 @@ class _GeneralScheduleCard extends StatelessWidget {
 }
 
 class _ManagedScheduleCard extends StatelessWidget {
-  const _ManagedScheduleCard({required this.item});
+  const _ManagedScheduleCard({required this.item, required this.onCorrection});
 
   final ManagedScheduleItem item;
+  final VoidCallback onCorrection;
 
   @override
   Widget build(BuildContext context) {
@@ -873,6 +1119,15 @@ class _ManagedScheduleCard extends StatelessWidget {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onCorrection,
+                icon: const Icon(Icons.report_outlined),
+                label: const Text('이 일정이 달라요'),
+              ),
+            ),
           ],
         ),
       ),

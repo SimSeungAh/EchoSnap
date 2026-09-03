@@ -2,6 +2,7 @@ package com.echosnap.backend.domain.address.client;
 
 import com.echosnap.backend.domain.address.dto.external.KakaoAddressSearchResponse;
 import com.echosnap.backend.domain.address.dto.external.KakaoCoordinateRegionResponse;
+import com.echosnap.backend.domain.address.dto.external.KakaoKeywordSearchResponse;
 import com.echosnap.backend.global.config.KakaoLocalProperties;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,9 @@ public class KakaoAddressClient {
 
   private static final String COORD_TO_REGION_PATH =
       "/v2/local/geo/coord2regioncode.json";
+
+  private static final String KEYWORD_SEARCH_PATH =
+      "/v2/local/search/keyword.json";
 
   private final RestClient restClient;
 
@@ -66,6 +70,23 @@ public class KakaoAddressClient {
         .body(
             KakaoAddressSearchResponse.class
         );
+  }
+
+  /** 아파트명, 건물명처럼 주소 형식이 아닌 검색어로 장소를 찾습니다. */
+  public KakaoKeywordSearchResponse searchKeyword(
+      String query,
+      int page,
+      int size
+  ) {
+    return restClient.get()
+        .uri(uriBuilder -> uriBuilder
+            .path(KEYWORD_SEARCH_PATH)
+            .queryParam("query", query)
+            .queryParam("page", page)
+            .queryParam("size", size)
+            .build())
+        .retrieve()
+        .body(KakaoKeywordSearchResponse.class);
   }
 
   /**

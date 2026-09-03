@@ -301,6 +301,9 @@ class ConfirmableScheduleReport {
     required this.confirmedCount,
     required this.differentCount,
     required this.myConfirmationValue,
+    required this.status,
+    required this.reportType,
+    required this.canConfirm,
   });
 
   final int id;
@@ -314,6 +317,9 @@ class ConfirmableScheduleReport {
   final int confirmedCount;
   final int differentCount;
   final String? myConfirmationValue;
+  final String status;
+  final String reportType;
+  final bool canConfirm;
 
   factory ConfirmableScheduleReport.fromJson(Map<String, dynamic> json) {
     final report = json['report'] is Map<String, dynamic>
@@ -331,6 +337,9 @@ class ConfirmableScheduleReport {
       confirmedCount: (json['confirmedCount'] as num?)?.toInt() ?? 0,
       differentCount: (json['differentCount'] as num?)?.toInt() ?? 0,
       myConfirmationValue: json['myConfirmationValue']?.toString(),
+      status: report['status']?.toString() ?? 'PENDING',
+      reportType: report['reportType']?.toString() ?? 'INITIAL_SCHEDULE',
+      canConfirm: json['canConfirm'] as bool? ?? false,
     );
   }
 }
@@ -413,6 +422,16 @@ class ScheduleApi {
 
   static Future<List<ConfirmableScheduleReport>> getConfirmableReports() async {
     final body = await _get('/api/schedule-reports/confirmable');
+    final data = body['data'];
+    if (data is! List) return const [];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(ConfirmableScheduleReport.fromJson)
+        .toList();
+  }
+
+  static Future<List<ConfirmableScheduleReport>> getMyReports() async {
+    final body = await _get('/api/schedule-reports/me');
     final data = body['data'];
     if (data is! List) return const [];
     return data

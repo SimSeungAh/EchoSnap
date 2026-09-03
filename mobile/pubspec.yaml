@@ -27,6 +27,8 @@ dependencies:
 
   # AI 이미지 디코딩 및 640x640 전처리
   image: ^4.9.2
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
 
 dev_dependencies:
   flutter_test:

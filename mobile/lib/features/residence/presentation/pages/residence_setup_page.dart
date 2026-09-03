@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:echosnap/app/app_routes.dart';
 import 'package:echosnap/core/storage/token_storage.dart';
 import 'package:echosnap/features/residence/data/residence_setup_api.dart';
@@ -186,57 +188,34 @@ class _ResidenceSetupPageState extends State<ResidenceSetupPage> {
   }
 
   Future<void> _requestApartmentRegistration(AddressSearchItem address) async {
-    final TextEditingController nameController = TextEditingController(
-      text: (address.buildingName?.isNotEmpty ?? false)
-          ? address.buildingName
-          : _searchController.text.trim(),
-    );
-
     final String? name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('아파트 등록 요청'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(address.displayAddress),
-            const SizedBox(height: 16),
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: '아파트·오피스텔 이름'),
-            ),
-            const SizedBox(height: 10),
-            const Text('관리자 승인 후 같은 단지 주민들이 검색하고 선택할 수 있어요.'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final value = nameController.text.trim();
-              if (value.isNotEmpty) Navigator.pop(context, value);
-            },
-            child: const Text('등록 요청'),
-          ),
-        ],
+      builder: (context) => _ApartmentRegistrationDialog(
+        address: address.displayAddress,
+        initialName: (address.buildingName?.isNotEmpty ?? false)
+            ? address.buildingName!
+            : _searchController.text.trim(),
       ),
     );
-    nameController.dispose();
     if (name == null || !mounted) return;
 
     setState(() => _isSaving = true);
     try {
-      await ResidenceSetupApi.requestApartmentRegistration(
-        address,
-        apartmentName: name,
-      );
-      if (mounted) {
-        _showMessage('등록 요청을 보냈어요. 관리자 승인 후 선택할 수 있습니다.');
+      final bool automaticallyApproved =
+          await ResidenceSetupApi.requestApartmentRegistration(
+            address,
+            apartmentName: name,
+          );
+      if (!mounted) return;
+
+      if (automaticallyApproved) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.home,
+          (route) => false,
+        );
+      } else {
+        _showMessage('주소 정보 확인이 필요한 건물이라 관리자에게 등록 요청을 보냈어요.');
       }
     } on ResidenceSetupApiException catch (exception) {
       if (exception.unauthorized) {
@@ -520,6 +499,33 @@ class _ResidenceSetupPageState extends State<ResidenceSetupPage> {
 
   Widget _buildSearchResult(BuildContext context) {
     if (_isManagedComplex) {
+      final List<_ResidenceMapPoint> mapPoints = [
+        ..._apartments
+            .where((item) => item.latitude != 0 && item.longitude != 0)
+            .map(
+              (item) => _ResidenceMapPoint(
+                latitude: item.latitude,
+                longitude: item.longitude,
+                label: item.name,
+                selected: _selectedApartment?.id == item.id,
+                onTap: () => setState(() => _selectedApartment = item),
+              ),
+            ),
+        ..._addresses
+            .where((item) => item.latitude != 0 && item.longitude != 0)
+            .map(
+              (item) => _ResidenceMapPoint(
+                latitude: item.latitude,
+                longitude: item.longitude,
+                label: item.buildingName?.isNotEmpty == true
+                    ? item.buildingName!
+                    : item.displayAddress,
+                selected: false,
+                onTap: () => _requestApartmentRegistration(item),
+              ),
+            ),
+      ];
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -584,6 +590,17 @@ class _ResidenceSetupPageState extends State<ResidenceSetupPage> {
             const SizedBox(height: 10),
             const _EmptyResult(message: '주소 검색 결과도 없습니다. 도로명 주소로 다시 검색해주세요.'),
           ],
+          if (mapPoints.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _ResidenceResultsMap(
+              key: ValueKey(
+                mapPoints
+                    .map((point) => '${point.latitude},${point.longitude}')
+                    .join('|'),
+              ),
+              points: mapPoints,
+            ),
+          ],
         ],
       );
     }
@@ -592,45 +609,244 @@ class _ResidenceSetupPageState extends State<ResidenceSetupPage> {
       return const _EmptyResult(message: '검색된 주소가 없습니다.');
     }
 
-    return Column(
-      children: _addresses.map((address) {
-        final bool selected = identical(_selectedAddress, address);
+    final List<_ResidenceMapPoint> mapPoints = _addresses
+        .where((item) => item.latitude != 0 && item.longitude != 0)
+        .map(
+          (item) => _ResidenceMapPoint(
+            latitude: item.latitude,
+            longitude: item.longitude,
+            label: item.buildingName?.isNotEmpty == true
+                ? item.buildingName!
+                : item.displayAddress,
+            selected: identical(_selectedAddress, item),
+            onTap: () => setState(() => _selectedAddress = item),
+          ),
+        )
+        .toList();
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Card(
-            child: ListTile(
-              onTap: () {
-                setState(() {
-                  _selectedAddress = address;
-                });
-              },
-              leading: Icon(
-                Icons.home_work_outlined,
-                color: selected ? Theme.of(context).colorScheme.primary : null,
-              ),
-              title: Text(address.displayAddress),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (address.jibunAddress != null)
-                    Text('지번 ${address.jibunAddress}'),
-                  Text(
-                    '${address.sido} '
-                    '${address.sigungu}',
-                  ),
-                ],
-              ),
-              trailing: Icon(
-                selected
-                    ? Icons.check_circle_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                color: selected ? Theme.of(context).colorScheme.primary : null,
+    return Column(
+      children: [
+        ..._addresses.map((address) {
+          final bool selected = identical(_selectedAddress, address);
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Card(
+              child: ListTile(
+                onTap: () {
+                  setState(() {
+                    _selectedAddress = address;
+                  });
+                },
+                leading: Icon(
+                  Icons.home_work_outlined,
+                  color: selected
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
+                title: Text(address.displayAddress),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (address.jibunAddress != null)
+                      Text('지번 ${address.jibunAddress}'),
+                    Text(
+                      '${address.sido} '
+                      '${address.sigungu}',
+                    ),
+                  ],
+                ),
+                trailing: Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: selected
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
               ),
             ),
+          );
+        }),
+        if (mapPoints.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _ResidenceResultsMap(
+            key: ValueKey(
+              mapPoints
+                  .map((point) => '${point.latitude},${point.longitude}')
+                  .join('|'),
+            ),
+            points: mapPoints,
           ),
-        );
-      }).toList(),
+        ],
+      ],
+    );
+  }
+}
+
+class _ResidenceMapPoint {
+  const _ResidenceMapPoint({
+    required this.latitude,
+    required this.longitude,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final double latitude;
+  final double longitude;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+}
+
+class _ResidenceResultsMap extends StatelessWidget {
+  const _ResidenceResultsMap({super.key, required this.points});
+
+  final List<_ResidenceMapPoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    final _ResidenceMapPoint first = points.first;
+    final Color primary = Theme.of(context).colorScheme.primary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.map_outlined, size: 20),
+            const SizedBox(width: 6),
+            Text('지도에서 확인', style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 240,
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: LatLng(first.latitude, first.longitude),
+                initialZoom: 15,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.echosnap.echosnap',
+                ),
+                MarkerLayer(
+                  markers: points
+                      .map(
+                        (point) => Marker(
+                          point: LatLng(point.latitude, point.longitude),
+                          width: 52,
+                          height: 52,
+                          child: Semantics(
+                            button: true,
+                            label: point.label,
+                            child: GestureDetector(
+                              onTap: point.onTap,
+                              child: Icon(
+                                Icons.location_pin,
+                                size: point.selected ? 50 : 42,
+                                color: point.selected
+                                    ? primary
+                                    : Colors.redAccent,
+                                shadows: const [
+                                  Shadow(color: Colors.black26, blurRadius: 4),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('OpenStreetMap contributors'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '마커를 누르면 위치를 선택하거나 등록을 요청할 수 있어요.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _ApartmentRegistrationDialog extends StatefulWidget {
+  const _ApartmentRegistrationDialog({
+    required this.address,
+    required this.initialName,
+  });
+
+  final String address;
+  final String initialName;
+
+  @override
+  State<_ApartmentRegistrationDialog> createState() =>
+      _ApartmentRegistrationDialogState();
+}
+
+class _ApartmentRegistrationDialogState
+    extends State<_ApartmentRegistrationDialog> {
+  late final TextEditingController _nameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final String value = _nameController.text.trim();
+    if (value.isNotEmpty) {
+      Navigator.pop(context, value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('아파트 등록 요청'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.address),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+            decoration: const InputDecoration(labelText: '아파트·오피스텔 이름'),
+          ),
+          const SizedBox(height: 10),
+          const Text('공동주택 정보가 확인되면 즉시 설정되고, 확인이 필요한 경우에만 관리자가 검토해요.'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
+        ElevatedButton(onPressed: _submit, child: const Text('등록 요청')),
+      ],
     );
   }
 }

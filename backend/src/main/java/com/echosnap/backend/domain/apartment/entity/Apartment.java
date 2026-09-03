@@ -70,7 +70,6 @@ public class Apartment extends BaseEntity {
      */
     @Column(
             name = "building_management_number",
-            nullable = false,
             length = 25
     )
     private String buildingManagementNumber;

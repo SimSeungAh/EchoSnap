@@ -1,6 +1,6 @@
 package com.echosnap.backend.domain.apartment.controller;
 
-import com.echosnap.backend.domain.apartment.dto.request.CreateApartmentRequest;
+import com.echosnap.backend.domain.apartment.dto.request.TemporaryApartmentRequest;
 import com.echosnap.backend.domain.apartment.dto.response.ApartmentResponse;
 import com.echosnap.backend.domain.apartment.service.ApartmentService;
 import com.echosnap.backend.global.response.ApiResponse;
@@ -52,7 +52,7 @@ public class ApartmentController {
 
             @Valid
             @RequestBody
-            CreateApartmentRequest request
+            TemporaryApartmentRequest request
     ) {
         ApartmentResponse response =
                 apartmentService.registerTemporary(

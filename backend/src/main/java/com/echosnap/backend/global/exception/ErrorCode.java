@@ -123,6 +123,12 @@ public enum ErrorCode {
       "승인된 아파트만 선택할 수 있습니다."
   ),
 
+  APARTMENT_BUILDING_INFO_NOT_FOUND(
+      HttpStatus.BAD_REQUEST,
+      "APARTMENT_005",
+      "선택한 주소의 건물 식별정보를 확인할 수 없습니다. 도로명주소를 확인해주세요."
+  ),
+
   /*
    * 폐기물
    */

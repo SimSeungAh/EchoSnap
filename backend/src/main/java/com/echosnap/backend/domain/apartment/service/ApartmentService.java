@@ -3,6 +3,9 @@ package com.echosnap.backend.domain.apartment.service;
 import com.echosnap.backend.domain.apartment.dto.request.CreateApartmentRequest;
 import com.echosnap.backend.domain.apartment.dto.request.RejectApartmentRequest;
 import com.echosnap.backend.domain.apartment.dto.request.UpdateApartmentRequest;
+import com.echosnap.backend.domain.apartment.dto.request.TemporaryApartmentRequest;
+import com.echosnap.backend.domain.address.client.JusoAddressClient;
+import com.echosnap.backend.domain.address.dto.external.JusoAddressSearchResponse;
 import com.echosnap.backend.domain.apartment.dto.response.ApartmentResponse;
 import com.echosnap.backend.domain.apartment.entity.Apartment;
 import com.echosnap.backend.domain.apartment.entity.ApartmentStatus;
@@ -26,6 +29,7 @@ public class ApartmentService {
 
     private final ApartmentRepository apartmentRepository;
     private final UserRepository userRepository;
+    private final JusoAddressClient jusoAddressClient;
 
     /**
      * 일반 사용자가 신축 아파트를 임시 등록. 임시 등록된 아파트는 PENDING 상태로 생성되며 관리자가 승인하기 전까지 일반 검색 결과에 노출되지 않음
@@ -33,28 +37,95 @@ public class ApartmentService {
     @Transactional
     public ApartmentResponse registerTemporary(
             Long userId,
-            CreateApartmentRequest request
+            TemporaryApartmentRequest request
     ) {
         User user = getUser(userId);
 
-        validateDuplicateBuildingManagementNumber(
-                request.buildingManagementNumber()
-        );
+        BuildingVerification verification = verifyBuilding(request);
+        String buildingManagementNumber = verification.buildingManagementNumber();
 
-        Apartment apartment = Apartment.createTemporary(
-                request.name().trim(),
-                request.roadAddress().trim(),
-                trimToNull(request.jibunAddress()),
-                request.buildingManagementNumber().trim(),
-                request.latitude(),
-                request.longitude(),
-                user
-        );
+        Apartment apartment = buildingManagementNumber == null
+                ? null
+                : apartmentRepository.findByBuildingManagementNumber(
+                buildingManagementNumber
+        ).orElse(null);
 
-        Apartment savedApartment =
-                apartmentRepository.save(apartment);
+        if (apartment == null) {
+            apartment = verification.apartment()
+                    ? Apartment.createApproved(
+                    request.name().trim(), request.roadAddress().trim(),
+                    trimToNull(request.jibunAddress()), buildingManagementNumber,
+                    request.latitude(), request.longitude(), user)
+                    : Apartment.createTemporary(
+                    request.name().trim(), request.roadAddress().trim(),
+                    trimToNull(request.jibunAddress()), buildingManagementNumber,
+                    request.latitude(), request.longitude(), user);
+        } else if (verification.apartment()
+                && apartment.getStatus() != ApartmentStatus.APPROVED) {
+            apartment.approve();
+        }
+
+        Apartment savedApartment = apartmentRepository.save(apartment);
+
+        if (savedApartment.getStatus() == ApartmentStatus.APPROVED) {
+            user.changeToManagedComplex(savedApartment);
+            user.updateOnboardingCompleted(true);
+        }
 
         return ApartmentResponse.from(savedApartment);
+    }
+
+    private BuildingVerification verifyBuilding(
+            TemporaryApartmentRequest request
+    ) {
+        if (!jusoAddressClient.isConfigured()) {
+            return new BuildingVerification(
+                    validBuildingManagementNumber(request.buildingManagementNumber()),
+                    false
+            );
+        }
+
+        String normalizedRoadAddress = normalizeAddress(request.roadAddress());
+        String normalizedJibunAddress = normalizeAddress(request.jibunAddress());
+
+        JusoAddressSearchResponse.Juso match = jusoAddressClient
+                .search(request.roadAddress().trim(), 10)
+                .stream()
+                .filter(item ->
+                        normalizedRoadAddress.equals(normalizeAddress(
+                                firstNonBlank(item.roadAddrPart1(), item.roadAddr())
+                        ))
+                                || (!normalizedJibunAddress.isEmpty()
+                                && normalizedJibunAddress.equals(normalizeAddress(item.jibunAddr())))
+                )
+                .findFirst()
+                .orElse(null);
+
+        if (match == null) {
+            return new BuildingVerification(
+                    validBuildingManagementNumber(request.buildingManagementNumber()),
+                    false
+            );
+        }
+        String buildingManagementNumber =
+                validBuildingManagementNumber(match.bdMgtSn());
+        return new BuildingVerification(
+                buildingManagementNumber,
+                match.isApartment() && buildingManagementNumber != null
+        );
+    }
+
+    private String validBuildingManagementNumber(String value) {
+        String normalized = trimToNull(value);
+        return normalized != null && normalized.matches("\\d{25}")
+                ? normalized
+                : null;
+    }
+
+    private record BuildingVerification(
+            String buildingManagementNumber,
+            boolean apartment
+    ) {
     }
 
     /**
@@ -280,6 +351,9 @@ public class ApartmentService {
     private void validateDuplicateBuildingManagementNumber(
             String buildingManagementNumber
     ) {
+        if (buildingManagementNumber == null) {
+            return;
+        }
         boolean alreadyExists =
                 apartmentRepository
                         .existsByBuildingManagementNumber(
@@ -358,6 +432,30 @@ public class ApartmentService {
         return trimmedValue.isEmpty()
                 ? null
                 : trimmedValue;
+    }
+
+    private String normalizeAddress(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replaceFirst("서울특별시", "서울")
+                .replaceFirst("부산광역시", "부산")
+                .replaceFirst("대구광역시", "대구")
+                .replaceFirst("인천광역시", "인천")
+                .replaceFirst("광주광역시", "광주")
+                .replaceFirst("대전광역시", "대전")
+                .replaceFirst("울산광역시", "울산")
+                .replaceFirst("세종특별자치시", "세종")
+                .replaceFirst("강원특별자치도", "강원")
+                .replaceFirst("전북특별자치도", "전북")
+                .replaceFirst("제주특별자치도", "제주")
+                .replaceAll("\\s+", "")
+                .trim();
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return trimToNull(first) != null ? first : second;
     }
 
     /**
