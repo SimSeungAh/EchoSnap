@@ -39,7 +39,7 @@ IMAGE_EXTENSIONS = {
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="SmartRecycle YOLO 학습"
+        description="EchoSnap YOLO 학습"
     )
 
     parser.add_argument(
@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument(
         "--name",
         type=str,
-        default="smartrecycle-yolo",
+        default="echosnap-yolo",
     )
 
     parser.add_argument(
@@ -81,7 +81,7 @@ def parse_args():
     parser.add_argument(
         "--promote",
         action="store_true",
-        help="best.pt를 FastAPI용 models/smartrecycle-yolo.pt로 복사합니다.",
+        help="best.pt를 FastAPI용 models/echosnap-yolo.pt로 복사합니다.",
     )
 
     return parser.parse_args()
@@ -272,7 +272,7 @@ def promote_model(
 
     final_model_path = (
         MODELS_DIR
-        / "smartrecycle-yolo.pt"
+        / "echosnap-yolo.pt"
     )
 
     shutil.copy2(
@@ -288,7 +288,7 @@ def main() -> None:
 
     print()
     print("=" * 70)
-    print("SmartRecycle YOLO Training")
+    print("EchoSnap YOLO Training")
     print("=" * 70)
 
     validate_dataset()

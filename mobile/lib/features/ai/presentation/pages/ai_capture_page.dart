@@ -1,17 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:smart_recycle/app/app_routes.dart';
-import 'package:smart_recycle/core/storage/token_storage.dart';
-import 'package:smart_recycle/core/theme/app_theme.dart';
-import 'package:smart_recycle/features/ai/data/image_correction_api.dart';
-import 'package:smart_recycle/features/ai/data/image_upload_api.dart';
-import 'package:smart_recycle/features/ai/data/mobile_analysis_api.dart';
-import 'package:smart_recycle/features/ai/data/server_reanalysis_api.dart';
-import 'package:smart_recycle/features/ai/data/tflite_waste_detector.dart';
-import 'package:smart_recycle/features/ai/presentation/widgets/ai_analysis_result_card.dart';
-import 'package:smart_recycle/features/waste/data/waste_search_api.dart';
-import 'package:smart_recycle/features/waste/presentation/pages/waste_search_page.dart';
+import 'package:echosnap/app/app_routes.dart';
+import 'package:echosnap/core/storage/token_storage.dart';
+import 'package:echosnap/core/theme/app_theme.dart';
+import 'package:echosnap/features/ai/data/image_correction_api.dart';
+import 'package:echosnap/features/ai/data/image_upload_api.dart';
+import 'package:echosnap/features/ai/data/mobile_analysis_api.dart';
+import 'package:echosnap/features/ai/data/server_reanalysis_api.dart';
+import 'package:echosnap/features/ai/data/tflite_waste_detector.dart';
+import 'package:echosnap/features/ai/presentation/widgets/ai_analysis_result_card.dart';
+import 'package:echosnap/features/waste/data/waste_search_api.dart';
+import 'package:echosnap/features/waste/presentation/pages/waste_search_page.dart';
 
 class AiCapturePage
     extends StatefulWidget {

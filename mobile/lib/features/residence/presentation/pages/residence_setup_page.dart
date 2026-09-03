@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:smart_recycle/app/app_routes.dart';
-import 'package:smart_recycle/core/storage/token_storage.dart';
-import 'package:smart_recycle/features/residence/data/residence_setup_api.dart';
+import 'package:echosnap/app/app_routes.dart';
+import 'package:echosnap/core/storage/token_storage.dart';
+import 'package:echosnap/features/residence/data/residence_setup_api.dart';
 
 class ResidenceSetupPage extends StatefulWidget {
   const ResidenceSetupPage({

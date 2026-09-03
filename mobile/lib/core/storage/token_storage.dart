@@ -7,10 +7,10 @@ class TokenStorage {
   FlutterSecureStorage();
 
   static const String _accessTokenKey =
-      'smart_recycle_access_token';
+      'echosnap_access_token';
 
   static const String _refreshTokenKey =
-      'smart_recycle_refresh_token';
+      'echosnap_refresh_token';
 
   static Future<void> saveTokens({
     required String accessToken,

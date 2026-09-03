@@ -1,11 +1,11 @@
 services:
   mysql:
     image: mysql:8.4
-    container_name: smartrecycle-mysql
+    container_name: echosnap-mysql
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: 1234
-      MYSQL_DATABASE: smart_recycle
+      MYSQL_DATABASE: echosnap
       TZ: Asia/Seoul
     ports:
       - "3307:3306"
@@ -14,7 +14,7 @@ services:
 
   redis:
     image: redis:7.2
-    container_name: smartrecycle-redis
+    container_name: echosnap-redis
     restart: always
     ports:
       - "6379:6379"

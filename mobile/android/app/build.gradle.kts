@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.smartrecycle.smart_recycle"
+    namespace = "com.echosnap.echosnap"
 
     compileSdk = flutter.compileSdkVersion
 
@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId =
-            "com.smartrecycle.smart_recycle"
+            "com.echosnap.echosnap"
 
         /*
          * tflite_flutter 0.12.x 실기기 사용 기준에 맞춰

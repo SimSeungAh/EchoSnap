@@ -4,9 +4,9 @@ import type {
 } from './types';
 
 export const initialUsers: User[] = [
-  { id: 1, email: 'user1@smartrecycle.com', name: '김사용', role: 'USER', status: 'ACTIVE', residence: '스마트아파트', address: '부산광역시 부산진구 중앙대로 100', createdAt: '2026-08-02' },
-  { id: 2, email: 'house@smartrecycle.com', name: '이주택', role: 'USER', status: 'ACTIVE', residence: '일반주택', address: '부산광역시 부산진구 부전동 123-4', createdAt: '2026-08-08' },
-  { id: 3, email: 'sleep@smartrecycle.com', name: '박휴면', role: 'USER', status: 'WITHDRAWN', residence: '센트럴 오피스텔', address: '부산광역시 부산진구 가야대로 55', createdAt: '2026-07-20' },
+  { id: 1, email: 'user1@echosnap.com', name: '김사용', role: 'USER', status: 'ACTIVE', residence: '스마트아파트', address: '부산광역시 부산진구 중앙대로 100', createdAt: '2026-08-02' },
+  { id: 2, email: 'house@echosnap.com', name: '이주택', role: 'USER', status: 'ACTIVE', residence: '일반주택', address: '부산광역시 부산진구 부전동 123-4', createdAt: '2026-08-08' },
+  { id: 3, email: 'sleep@echosnap.com', name: '박휴면', role: 'USER', status: 'WITHDRAWN', residence: '센트럴 오피스텔', address: '부산광역시 부산진구 가야대로 55', createdAt: '2026-07-20' },
 ];
 
 export const initialResidences: Residence[] = [
@@ -47,8 +47,8 @@ export const initialGuides: Guide[] = [
 ];
 
 export const initialCorrections: AiCorrection[] = [
-  { id: 1, imageLogId: 31, userEmail: 'user1@smartrecycle.com', aiItem: '종이박스', aiConfidence: 0.803, correctedItem: '캔', status: 'PENDING', correctedAt: '2026-08-31 15:20' },
-  { id: 2, imageLogId: 25, userEmail: 'house@smartrecycle.com', aiItem: '플라스틱 용기', aiConfidence: 0.61, correctedItem: '페트병', status: 'APPROVED', correctedAt: '2026-08-30 19:10' },
+  { id: 1, imageLogId: 31, userEmail: 'user1@echosnap.com', aiItem: '종이박스', aiConfidence: 0.803, correctedItem: '캔', status: 'PENDING', correctedAt: '2026-08-31 15:20' },
+  { id: 2, imageLogId: 25, userEmail: 'house@echosnap.com', aiItem: '플라스틱 용기', aiConfidence: 0.61, correctedItem: '페트병', status: 'APPROVED', correctedAt: '2026-08-30 19:10' },
 ];
 
 export const initialSyncLogs: SyncLog[] = [

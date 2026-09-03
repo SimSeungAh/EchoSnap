@@ -179,7 +179,7 @@ def remove_ultralytics_cache() -> None:
 def main() -> None:
     print()
     print("=" * 70)
-    print("SmartRecycle Detection Label Normalizer")
+    print("EchoSnap Detection Label Normalizer")
     print("=" * 70)
 
     if not LABELS_DIR.exists():

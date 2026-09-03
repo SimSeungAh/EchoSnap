@@ -1,10 +1,10 @@
-# SmartRecycle API 명세
+# EchoSnap API 명세
 
 ## 1. 문서 정보
 
 | 항목 | 내용 |
 |---|---|
-| 프로젝트 | SmartRecycle |
+| 프로젝트 | EchoSnap |
 | API 서버 | Spring Boot |
 | 사용자 앱 | Flutter |
 | 관리자 웹 | React + TypeScript |
@@ -19,7 +19,7 @@
 
 ### 2.1 플랫폼 역할
 
-SmartRecycle의 Flutter 사용자 앱과 React 관리자 웹은 동일한 Spring Boot API를 사용한다.
+EchoSnap의 Flutter 사용자 앱과 React 관리자 웹은 동일한 Spring Boot API를 사용한다.
 
 ```text
 Flutter 사용자 앱
@@ -151,7 +151,7 @@ POST /api/auth/signup
 
 ```json
 {
-  "email": "user1@smartrecycle.com",
+  "email": "user1@echosnap.com",
   "password": "test1234!",
   "nickname": "테스트사용자"
 }
@@ -193,7 +193,7 @@ POST /api/auth/login
 
 ```json
 {
-  "email": "user1@smartrecycle.com",
+  "email": "user1@echosnap.com",
   "password": "test1234!"
 }
 ```
@@ -324,7 +324,7 @@ USER 또는 ADMIN
   "message": "내 정보 조회 성공",
   "data": {
     "id": 1,
-    "email": "user1@smartrecycle.com",
+    "email": "user1@echosnap.com",
     "nickname": "테스트사용자",
     "role": "USER",
     "status": "ACTIVE",
@@ -345,7 +345,7 @@ USER 또는 ADMIN
 ```json
 {
   "id": 1,
-  "email": "user1@smartrecycle.com",
+  "email": "user1@echosnap.com",
   "nickname": "테스트사용자",
   "role": "USER",
   "status": "ACTIVE",
@@ -381,7 +381,7 @@ PATCH /api/users/me
   "message": "내 정보가 수정되었습니다.",
   "data": {
     "id": 1,
-    "email": "user1@smartrecycle.com",
+    "email": "user1@echosnap.com",
     "nickname": "새로운닉네임"
   }
 }
@@ -1666,7 +1666,7 @@ updatedAt
 | `TOKEN` | JWT 및 Refresh Token |
 | `SERVER` | 서버 내부 오류 |
 
-## 27.2 SmartRecycle 도메인
+## 27.2 EchoSnap 도메인
 
 | 접두사 | 영역 |
 |---|---|

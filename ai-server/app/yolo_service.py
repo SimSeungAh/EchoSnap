@@ -53,11 +53,11 @@ class YoloPrediction:
 class YoloService:
 
     DEFAULT_MODEL_PATH = (
-        "./models/smartrecycle-yolo.pt"
+        "./models/echosnap-yolo.pt"
     )
 
     DEFAULT_MODEL_VERSION = (
-        "smartrecycle-yolo-v1"
+        "echosnap-yolo-v1"
     )
 
     DEFAULT_CONFIDENCE_THRESHOLD = 0.25
@@ -68,7 +68,7 @@ class YoloService:
 
     def __init__(self) -> None:
         configured_model_path = os.getenv(
-            "SMARTRECYCLE_YOLO_MODEL_PATH",
+            "ECHOSNAP_YOLO_MODEL_PATH",
             self.DEFAULT_MODEL_PATH,
         )
 
@@ -79,12 +79,12 @@ class YoloService:
         )
 
         self.model_version = os.getenv(
-            "SMARTRECYCLE_YOLO_MODEL_VERSION",
+            "ECHOSNAP_YOLO_MODEL_VERSION",
             self.DEFAULT_MODEL_VERSION,
         ).strip()
 
         confidence_text = os.getenv(
-            "SMARTRECYCLE_YOLO_CONFIDENCE",
+            "ECHOSNAP_YOLO_CONFIDENCE",
             str(
                 self.DEFAULT_CONFIDENCE_THRESHOLD
             ),
@@ -163,7 +163,7 @@ class YoloService:
 
         result = results[0]
 
-        # SmartRecycle의 최종 학습 모델이
+        # EchoSnap의 최종 학습 모델이
         # Classification 또는 Detection 중
         # 어떤 방식으로 확정될지 아직 정해지지 않았으므로
         # 두 결과 형식을 모두 처리합니다.
@@ -199,7 +199,7 @@ class YoloService:
 
         if not self.is_model_file_present():
             raise YoloModelNotReadyError(
-                "SmartRecycle YOLO 모델 파일을 "
+                "EchoSnap YOLO 모델 파일을 "
                 f"찾을 수 없습니다: {self.model_path}"
             )
 
@@ -210,7 +210,7 @@ class YoloService:
 
         except Exception as exc:
             raise YoloModelNotReadyError(
-                "SmartRecycle YOLO 모델을 "
+                "EchoSnap YOLO 모델을 "
                 "로드할 수 없습니다."
             ) from exc
 

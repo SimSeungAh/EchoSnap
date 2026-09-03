@@ -24,7 +24,7 @@ rootProject.layout.buildDirectory
  * 현재 tflite_flutter 0.12.1:
  * Java target = 11
  *
- * SmartRecycle / Kotlin:
+ * EchoSnap / Kotlin:
  * JVM target = 17
  *
  * 따라서 모든 Android 서브프로젝트를 JVM 17로 통일합니다.

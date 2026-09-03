@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:smart_recycle/core/network/authenticated_api_client.dart';
+import 'package:echosnap/core/network/authenticated_api_client.dart';
 
 class ServerReanalysisResult {
   const ServerReanalysisResult({

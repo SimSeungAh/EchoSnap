@@ -6,10 +6,10 @@ import 'package:image/image.dart'
 as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
-/// SmartRecycle 모바일 TFLite 분석 결과입니다.
+/// EchoSnap 모바일 TFLite 분석 결과입니다.
 ///
 /// 현재 모델은 YOLO Object Detection 모델이지만
-/// SmartRecycle 사용자 흐름에서는
+/// EchoSnap 사용자 흐름에서는
 /// 이미지에서 가장 신뢰도가 높은 폐기물 품목 하나를
 /// 1차 결과로 사용합니다.
 ///
@@ -59,7 +59,7 @@ class TfliteWasteDetectorException
 }
 
 /// Flutter 기기 안에서 실행되는
-/// SmartRecycle YOLO TFLite 분석기입니다.
+/// EchoSnap YOLO TFLite 분석기입니다.
 ///
 /// 실제 모델 구조:
 ///
@@ -87,7 +87,7 @@ class TfliteWasteDetectorException
 class TfliteWasteDetector {
   static const String _modelAsset =
       'assets/models/'
-      'smartrecycle-yolo.tflite';
+      'echosnap-yolo.tflite';
 
   static const String _labelsAsset =
       'assets/models/labels.txt';
@@ -95,7 +95,7 @@ class TfliteWasteDetector {
   /// Spring Boot ImageLog에도 저장되는
   /// 모바일 모델 버전입니다.
   static const String modelVersion =
-      'smartrecycle-tflite-v1';
+      'echosnap-tflite-v1';
 
   static const int _inputWidth = 640;
   static const int _inputHeight = 640;
@@ -147,7 +147,7 @@ class TfliteWasteDetector {
 
     if (kIsWeb) {
       throw const TfliteWasteDetectorException(
-        '현재 SmartRecycle TFLite 분석은 '
+        '현재 EchoSnap TFLite 분석은 '
             'Android 실기기에서 사용합니다.',
       );
     }
@@ -426,7 +426,7 @@ class TfliteWasteDetector {
   /// YOLO Detection output에서
   /// 가장 높은 confidence를 가진 품목을 선택합니다.
   ///
-  /// 현재 SmartRecycle의 모바일 1차 분석 목적은
+  /// 현재 EchoSnap의 모바일 1차 분석 목적은
   /// Bounding Box 자체를 사용자에게 그리는 것이 아니라
   /// "이 폐기물이 어떤 품목으로 추정되는가"를
   /// 빠르게 판단하는 것입니다.
@@ -596,7 +596,7 @@ class TfliteWasteDetector {
   }
 
   /// 앱에 포함된 모델이 우리가 확인했던
-  /// 실제 SmartRecycle 모델과 동일한 구조인지 검증합니다.
+  /// 실제 EchoSnap 모델과 동일한 구조인지 검증합니다.
   ///
   /// 모델 파일을 잘못 교체했을 때
   /// 조용히 틀린 결과가 나오는 것을 방지합니다.

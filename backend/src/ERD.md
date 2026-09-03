@@ -1,8 +1,8 @@
-# SmartRecycle ERD
+# EchoSnap ERD
 
 ## 1. 문서 목적
 
-SmartRecycle의 Spring Boot 백엔드에서 사용할 핵심 도메인과 데이터베이스 관계를 정의한다.
+EchoSnap의 Spring Boot 백엔드에서 사용할 핵심 도메인과 데이터베이스 관계를 정의한다.
 
 사용자 앱 Flutter와 관리자 웹 React는 동일한 Spring Boot API를 사용하며,
 서비스의 데이터와 비즈니스 규칙은 MySQL에서 통합 관리한다.

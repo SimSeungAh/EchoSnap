@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:smart_recycle/features/ai/presentation/pages/ai_capture_page.dart';
-import 'package:smart_recycle/features/ai/presentation/pages/ai_disposal_check_page.dart';
-import 'package:smart_recycle/features/auth/presentation/pages/login_page.dart';
-import 'package:smart_recycle/features/home/presentation/pages/home_page.dart';
-import 'package:smart_recycle/features/residence/presentation/pages/residence_setup_page.dart';
-import 'package:smart_recycle/features/schedule/presentation/pages/schedule_page.dart';
-import 'package:smart_recycle/features/splash/presentation/pages/splash_page.dart';
-import 'package:smart_recycle/features/waste/presentation/pages/waste_detail_page.dart';
-import 'package:smart_recycle/features/waste/presentation/pages/waste_search_page.dart';
+import 'package:echosnap/features/ai/presentation/pages/ai_capture_page.dart';
+import 'package:echosnap/features/ai/presentation/pages/ai_disposal_check_page.dart';
+import 'package:echosnap/features/auth/presentation/pages/login_page.dart';
+import 'package:echosnap/features/home/presentation/pages/home_page.dart';
+import 'package:echosnap/features/residence/presentation/pages/residence_setup_page.dart';
+import 'package:echosnap/features/schedule/presentation/pages/schedule_page.dart';
+import 'package:echosnap/features/splash/presentation/pages/splash_page.dart';
+import 'package:echosnap/features/waste/presentation/pages/waste_detail_page.dart';
+import 'package:echosnap/features/waste/presentation/pages/waste_search_page.dart';
 
 class AppRoutes {
   AppRoutes._();

@@ -1,4 +1,4 @@
-# smart_recycle
+# EchoSnap
 
 A new Flutter project.
 

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:smart_recycle/core/network/authenticated_api_client.dart';
+import 'package:echosnap/core/network/authenticated_api_client.dart';
 
 /// Flutter TFLite 1차 분석 결과를
 /// Spring Boot에 저장한 뒤 반환되는 결과입니다.

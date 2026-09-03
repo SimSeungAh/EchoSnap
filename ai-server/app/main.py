@@ -16,8 +16,8 @@ from app.yolo_service import (
 
 
 app = FastAPI(
-    title="SmartRecycle AI Server",
-    description="SmartRecycle 이미지 YOLO 분석 서버",
+    title="EchoSnap AI Server",
+    description="EchoSnap 이미지 YOLO 분석 서버",
     version="0.2.0",
 )
 
@@ -56,7 +56,7 @@ def health_check() -> HealthResponse:
             if model_ready
             else "degraded"
         ),
-        service="smart-recycle-ai-server",
+        service="echosnap-ai-server",
         modelReady=model_ready,
         modelVersion=yolo_service.model_version,
     )

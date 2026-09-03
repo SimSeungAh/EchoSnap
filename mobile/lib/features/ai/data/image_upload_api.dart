@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
-import 'package:smart_recycle/core/network/authenticated_api_client.dart';
+import 'package:echosnap/core/network/authenticated_api_client.dart';
 
 class ImageUploadResult {
   const ImageUploadResult({

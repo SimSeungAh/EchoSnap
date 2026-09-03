@@ -1,10 +1,10 @@
-SmartRecycle 관리자 웹 - 깨끗한 교체본
+EchoSnap 관리자 웹 - 깨끗한 교체본
 
 중요:
-1. 기존 C:\workspace\Smart-Recycle\web-admin 폴더는 이름을 web-admin-old 로 변경하세요.
-2. 이 ZIP의 web-admin 폴더를 C:\workspace\Smart-Recycle\ 아래에 넣으세요.
+1. 기존 C:\workspace\EchoSnap\web-admin 폴더는 이름을 web-admin-old 로 변경하세요.
+2. 이 ZIP의 web-admin 폴더를 C:\workspace\EchoSnap\ 아래에 넣으세요.
 3. Git Bash에서:
-   cd /c/workspace/Smart-Recycle/web-admin
+   cd /c/workspace/EchoSnap/web-admin
    rm -rf node_modules package-lock.json
    npm i
 4. esbuild install script blocked 경고가 나오면:

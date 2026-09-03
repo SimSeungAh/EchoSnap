@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:smart_recycle/app/app_routes.dart';
-import 'package:smart_recycle/core/storage/token_storage.dart';
-import 'package:smart_recycle/core/theme/app_theme.dart';
-import 'package:smart_recycle/features/user/data/current_user_api.dart';
-import 'package:smart_recycle/features/waste/data/waste_detail_api.dart';
+import 'package:echosnap/app/app_routes.dart';
+import 'package:echosnap/core/storage/token_storage.dart';
+import 'package:echosnap/core/theme/app_theme.dart';
+import 'package:echosnap/features/user/data/current_user_api.dart';
+import 'package:echosnap/features/waste/data/waste_detail_api.dart';
 
 class WasteDetailPage extends StatefulWidget {
   const WasteDetailPage({
@@ -133,7 +133,7 @@ class _WasteDetailPageState
       GeneralHousingScheduleResult result,
       ) {
     /*
-     * 현재 SmartRecycle의 일반주택 공공 일정은
+     * 현재 EchoSnap의 일반주택 공공 일정은
      * LIFE_WASTE / FOOD_WASTE / RECYCLABLE
      * 세 종류로 관리합니다.
      *

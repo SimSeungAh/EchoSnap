@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:smart_recycle/core/theme/app_theme.dart';
+import 'package:echosnap/core/theme/app_theme.dart';
 
 class AiAnalysisResultCard
     extends StatelessWidget {

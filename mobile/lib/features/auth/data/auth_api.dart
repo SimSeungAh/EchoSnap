@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:smart_recycle/core/config/app_config.dart';
+import 'package:echosnap/core/config/app_config.dart';
 
 class AuthToken {
   const AuthToken({

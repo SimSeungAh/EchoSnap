@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:smart_recycle/core/config/app_config.dart';
-import 'package:smart_recycle/core/storage/token_storage.dart';
-import 'package:smart_recycle/features/auth/data/auth_api.dart';
+import 'package:echosnap/core/config/app_config.dart';
+import 'package:echosnap/core/storage/token_storage.dart';
+import 'package:echosnap/features/auth/data/auth_api.dart';
 
 class AuthenticatedApiException
     implements Exception {
@@ -105,7 +105,7 @@ class AuthenticatedApiClient {
   /// 기존 리소스 전체 또는 명시적인 값을
   /// 변경하는 PUT 요청입니다.
   ///
-  /// SmartRecycle에서는 현재
+  /// EchoSnap에서는 현재
   /// AI 사용자 정정 API에서 사용합니다.
   static Future<http.Response> put(
       String path, {

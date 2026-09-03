@@ -33,7 +33,7 @@ TARGET_CLASS_IDS = {
 }
 
 
-# 공개 데이터셋의 실제 클래스명 → SmartRecycle 클래스명
+# 공개 데이터셋의 실제 클래스명 → EchoSnap 클래스명
 SOURCE_CLASS_ALIASES = {
     "cardboard": "cardboard_box",
     "cardboard boxes and cartons": "cardboard_box",
@@ -580,7 +580,7 @@ def print_summary(
 ) -> None:
     print()
     print("=" * 80)
-    print("SmartRecycle 데이터셋 병합 결과")
+    print("EchoSnap 데이터셋 병합 결과")
     print("=" * 80)
 
     for split in [
@@ -655,7 +655,7 @@ def validate_final_dataset(
 
     if missing_classes:
         raise RuntimeError(
-            "다음 SmartRecycle 클래스의 "
+            "다음 EchoSnap 클래스의 "
             "라벨을 찾지 못했습니다: "
             + ", ".join(missing_classes)
         )
@@ -664,7 +664,7 @@ def validate_final_dataset(
 def main() -> None:
     print()
     print(
-        "SmartRecycle 공개 데이터셋 "
+        "EchoSnap 공개 데이터셋 "
         "6종 자동 병합"
     )
     print()

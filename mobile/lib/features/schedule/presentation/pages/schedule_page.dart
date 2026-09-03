@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:smart_recycle/app/app_routes.dart';
-import 'package:smart_recycle/core/storage/token_storage.dart';
-import 'package:smart_recycle/core/theme/app_theme.dart';
-import 'package:smart_recycle/features/schedule/data/schedule_api.dart';
-import 'package:smart_recycle/features/user/data/current_user_api.dart';
+import 'package:echosnap/app/app_routes.dart';
+import 'package:echosnap/core/storage/token_storage.dart';
+import 'package:echosnap/core/theme/app_theme.dart';
+import 'package:echosnap/features/schedule/data/schedule_api.dart';
+import 'package:echosnap/features/user/data/current_user_api.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({

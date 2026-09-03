@@ -200,7 +200,7 @@ def inspect_dataset(zip_path: Path) -> None:
 
 def main() -> None:
     print()
-    print("SmartRecycle 공개 데이터셋 검사")
+    print("EchoSnap 공개 데이터셋 검사")
     print()
 
     if not RAW_DATASETS_DIR.exists():
@@ -232,7 +232,7 @@ def main() -> None:
     print()
     print(
         "위 클래스 목록을 확인한 뒤 "
-        "SmartRecycle 6개 클래스로 변환합니다."
+        "EchoSnap 6개 클래스로 변환합니다."
     )
 
 

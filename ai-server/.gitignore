@@ -16,4 +16,4 @@ raw-datasets/
 models/
 runs/
 *.pt
-training/smartrecycle-data.generated.yaml
+training/echosnap-data.generated.yaml

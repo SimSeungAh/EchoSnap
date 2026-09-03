@@ -3,4 +3,4 @@ server:
 
 spring:
   application:
-    name: smart-recycle-backend
+    name: echosnap-backend

@@ -34,9 +34,9 @@ import type {
   WasteItem,
 } from "./types";
 
-const ACCESS = "smartrecycle_admin_access";
-const REFRESH = "smartrecycle_admin_refresh";
-const SESSION = "smartrecycle_admin_session";
+const ACCESS = "echosnap_admin_access";
+const REFRESH = "echosnap_admin_refresh";
+const SESSION = "echosnap_admin_session";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type JsonRecord = Record<string, unknown>;
@@ -258,7 +258,7 @@ function clearAuth() {
 
 function expireSession() {
   clearAuth();
-  window.dispatchEvent(new Event("smartrecycle-auth-expired"));
+  window.dispatchEvent(new Event("echosnap-auth-expired"));
 }
 
 async function readPayload(response: Response): Promise<unknown> {
@@ -746,7 +746,7 @@ export const authApi = {
   async login(email: string, password: string) {
     if (CONFIG.useMocks) {
       await delay();
-      if (email !== "admin@smartrecycle.com" || password !== "Admin1234!") {
+      if (email !== "admin@echosnap.com" || password !== "Admin1234!") {
         throw new Error("관리자 이메일 또는 비밀번호를 확인해주세요.");
       }
 

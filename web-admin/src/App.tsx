@@ -96,7 +96,7 @@ function PageHeader({
   return (
     <div className="page-header">
       <div>
-        <div className="eyebrow">SMARTRECYCLE ADMIN</div>
+        <div className="eyebrow">ECHOSNAP ADMIN</div>
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
@@ -178,9 +178,9 @@ export default function App() {
 
   useEffect(() => {
     const expired = () => setSession(null);
-    window.addEventListener("smartrecycle-auth-expired", expired);
+    window.addEventListener("echosnap-auth-expired", expired);
     return () =>
-      window.removeEventListener("smartrecycle-auth-expired", expired);
+      window.removeEventListener("echosnap-auth-expired", expired);
   }, []);
 
   return (
@@ -218,7 +218,7 @@ function LoginPage({
 }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState(
-    CONFIG.useMocks ? "admin@smartrecycle.com" : "",
+    CONFIG.useMocks ? "admin@echosnap.com" : "",
   );
   const [password, setPassword] = useState(CONFIG.useMocks ? "Admin1234!" : "");
   const [busy, setBusy] = useState(false);
@@ -245,7 +245,7 @@ function LoginPage({
     <div className="login">
       <section className="login-hero">
         <div className="login-mark">♻</div>
-        <div className="eyebrow light">SMARTRECYCLE</div>
+        <div className="eyebrow light">ECHOSNAP</div>
         <h1>
           더 정확한 분리배출을
           <br />
@@ -270,7 +270,7 @@ function LoginPage({
             <div className="demo">
               데모 계정
               <br />
-              <b>admin@smartrecycle.com</b>
+              <b>admin@echosnap.com</b>
               <br />
               Admin1234!
             </div>
@@ -347,7 +347,7 @@ function Shell({
         <div className="brand">
           <span>♻</span>
           <div>
-            <b>SmartRecycle</b>
+            <b>EchoSnap</b>
             <small>ADMIN CONSOLE</small>
           </div>
         </div>
@@ -391,7 +391,7 @@ function Shell({
             </button>
             <div>
               <b>{routeTitle(location.pathname)}</b>
-              <small>SmartRecycle 운영 관리</small>
+              <small>EchoSnap 운영 관리</small>
             </div>
           </div>
           <div className="top-right">
@@ -439,7 +439,7 @@ function routeTitle(path: string) {
     "/notifications": "알림 관리",
     "/settings": "관리자 설정",
   };
-  return map[path] ?? "SmartRecycle";
+  return map[path] ?? "EchoSnap";
 }
 
 function DashboardPage() {
@@ -471,7 +471,7 @@ function DashboardPage() {
     <>
       <PageHeader
         title="운영 현황"
-        subtitle="SmartRecycle 서비스의 핵심 상태를 빠르게 확인합니다."
+        subtitle="EchoSnap 서비스의 핵심 상태를 빠르게 확인합니다."
       />
       <div className="stats">
         {stats.map(([label, value, helper, icon]) => (
@@ -4076,7 +4076,7 @@ function PublicDataPage() {
       />
 
       <div className="notice">
-        <b>공공데이터 → SmartRecycle 내부 도메인 변환</b>
+        <b>공공데이터 → EchoSnap 내부 도메인 변환</b>
         <span>
           외부 원문을 그대로 노출하지 않고 수거구역, 일정, 품목 체계와 매핑해
           사용자에게 제공합니다. 원본 세부 규칙은 보존하고 관리자 화면에서만
