@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:echosnap/features/ai/presentation/pages/ai_capture_page.dart';
 import 'package:echosnap/features/ai/presentation/pages/ai_disposal_check_page.dart';
 import 'package:echosnap/features/auth/presentation/pages/login_page.dart';
+import 'package:echosnap/features/auth/presentation/pages/signup_page.dart';
 import 'package:echosnap/features/home/presentation/pages/home_page.dart';
 import 'package:echosnap/features/residence/presentation/pages/residence_setup_page.dart';
 import 'package:echosnap/features/schedule/presentation/pages/schedule_page.dart';
@@ -17,6 +18,9 @@ class AppRoutes {
 
   static const String login =
       '/login';
+
+  static const String signup =
+      '/signup';
 
   static const String aiCapture =
       '/ai-capture';
@@ -130,6 +134,14 @@ class AppRoutes {
         return MaterialPageRoute(
           builder: (_) =>
           const LoginPage(),
+          settings:
+          settings,
+        );
+
+      case signup:
+        return MaterialPageRoute(
+          builder: (_) =>
+          const SignupPage(),
           settings:
           settings,
         );

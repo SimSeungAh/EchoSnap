@@ -22,6 +22,8 @@ public record ImageCorrectionResponse(
 
     String correctedWasteItemName,
 
+    String description,
+
     ImageAnalysisStatus analysisStatus,
 
     ImageReviewStatus reviewStatus,
@@ -67,6 +69,8 @@ public record ImageCorrectionResponse(
         correctedWasteItem != null
             ? correctedWasteItem.getName()
             : null,
+
+        imageLog.getUserCorrectionDescription(),
 
         imageLog.getAnalysisStatus(),
         imageLog.getReviewStatus(),

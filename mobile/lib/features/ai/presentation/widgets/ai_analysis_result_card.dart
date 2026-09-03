@@ -10,8 +10,10 @@ class AiAnalysisResultCard
     required this.usedServerReanalysis,
     required this.userCorrected,
     required this.isCorrecting,
+    required this.correctionSubmitted,
     required this.onAccept,
     required this.onCorrect,
+    required this.onReport,
   });
 
   final String wasteItemName;
@@ -26,9 +28,13 @@ class AiAnalysisResultCard
 
   final bool isCorrecting;
 
+  final bool correctionSubmitted;
+
   final VoidCallback onAccept;
 
   final VoidCallback onCorrect;
+
+  final VoidCallback onReport;
 
   String get _confidenceText {
     final double? value =
@@ -338,7 +344,7 @@ class AiAnalysisResultCard
                 label: Text(
                   isCorrecting
                       ? '수정 결과 저장 중...'
-                      : '다른 품목이에요',
+                      : '품목 변경하기',
                 ),
               ),
             ),
@@ -349,15 +355,18 @@ class AiAnalysisResultCard
               child:
               ElevatedButton.icon(
                 onPressed:
-                isCorrecting
+                isCorrecting || correctionSubmitted
                     ? null
-                    : onAccept,
-                icon: const Icon(
-                  Icons
-                      .fact_check_outlined,
+                    : onReport,
+                icon: Icon(
+                  correctionSubmitted
+                      ? Icons.check_circle_rounded
+                      : Icons.send_rounded,
                 ),
-                label: const Text(
-                  '배출 전 확인하기',
+                label: Text(
+                  correctionSubmitted
+                      ? '정정 요청을 보냈어요'
+                      : '관리자에게 정정 보내기',
                 ),
               ),
             ),
@@ -395,6 +404,23 @@ class AiAnalysisResultCard
                       ? '변경 결과 저장 중...'
                       : '품목 다시 변경하기',
                 ),
+              ),
+            ),
+
+            const SizedBox(
+              height: 4,
+            ),
+
+            TextButton.icon(
+              onPressed:
+              isCorrecting
+                  ? null
+                  : onAccept,
+              icon: const Icon(
+                Icons.fact_check_outlined,
+              ),
+              label: const Text(
+                '배출 전 확인하기',
               ),
             ),
           ],

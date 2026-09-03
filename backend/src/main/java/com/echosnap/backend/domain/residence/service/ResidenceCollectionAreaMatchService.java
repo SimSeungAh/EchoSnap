@@ -503,6 +503,13 @@ public class ResidenceCollectionAreaMatchService {
           evaluateMultiUnitHouse(
               normalized
           );
+
+      /*
+       * 세부 유형을 모르면 특정 주택 유형이 명시된
+       * 일정은 추측해서 연결하지 않습니다.
+       */
+      case UNSPECIFIED ->
+          HOUSING_INCOMPATIBLE;
     };
   }
 

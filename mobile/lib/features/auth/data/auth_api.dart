@@ -46,6 +46,70 @@ class AuthApiException implements Exception {
 class AuthApi {
   AuthApi._();
 
+  static Future<void> signup({
+    required String email,
+    required String password,
+    required String nickname,
+  }) async {
+    final Uri uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/api/auth/signup',
+    );
+
+    late http.Response response;
+
+    try {
+      response = await http
+          .post(
+        uri,
+        headers: const {
+          'Content-Type':
+          'application/json; charset=UTF-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'nickname': nickname,
+        }),
+      )
+          .timeout(
+        const Duration(seconds: 10),
+      );
+    } catch (_) {
+      throw const AuthApiException(
+        '서버에 연결할 수 없습니다. '
+            '잠시 후 다시 시도해주세요.',
+      );
+    }
+
+    Map<String, dynamic> responseBody;
+
+    try {
+      responseBody = jsonDecode(
+        utf8.decode(response.bodyBytes),
+      ) as Map<String, dynamic>;
+    } catch (_) {
+      throw AuthApiException(
+        '서버 응답을 처리할 수 없습니다. '
+            '(HTTP ${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final String message =
+        responseBody['message'] as String? ??
+            '회원가입 처리 중 오류가 발생했습니다.';
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        responseBody['success'] != true) {
+      throw AuthApiException(
+        message,
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
   static Future<AuthToken> login({
     required String email,
     required String password,
@@ -63,6 +127,65 @@ class AuthApi {
       defaultErrorMessage:
       '로그인 처리 중 오류가 발생했습니다.',
     );
+  }
+
+  static Future<void> logout({
+    required String refreshToken,
+  }) async {
+    final Uri uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/api/auth/logout',
+    );
+
+    late http.Response response;
+
+    try {
+      response = await http
+          .post(
+        uri,
+        headers: const {
+          'Content-Type':
+          'application/json; charset=UTF-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'refreshToken': refreshToken,
+        }),
+      )
+          .timeout(
+        const Duration(seconds: 10),
+      );
+    } catch (_) {
+      throw const AuthApiException(
+        '서버에 연결할 수 없습니다.',
+      );
+    }
+
+    Map<String, dynamic> responseBody;
+
+    try {
+      responseBody = jsonDecode(
+        utf8.decode(response.bodyBytes),
+      ) as Map<String, dynamic>;
+    } catch (_) {
+      throw AuthApiException(
+        '서버 응답을 처리할 수 없습니다. '
+            '(HTTP ${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final String message =
+        responseBody['message'] as String? ??
+            '로그아웃 처리 중 오류가 발생했습니다.';
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        responseBody['success'] != true) {
+      throw AuthApiException(
+        message,
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   static Future<AuthToken> reissue({

@@ -259,6 +259,15 @@ public class ImageLog extends BaseEntity {
   private WasteItem userCorrectedWasteItem;
 
   /**
+   * 사용자가 관리자 검수에 함께 전달한 물품 설명
+   */
+  @Column(
+      name = "user_correction_description",
+      length = 500
+  )
+  private String userCorrectionDescription;
+
+  /**
    * 사용자가 AI 결과를 수정한 시각
    */
   @Column(
@@ -444,10 +453,16 @@ public class ImageLog extends BaseEntity {
    * 이후 관리자 검수 대상으로 전환합니다.
    */
   public void correctByUser(
-      WasteItem correctedWasteItem
+      WasteItem correctedWasteItem,
+      String description
   ) {
     this.userCorrectedWasteItem =
         correctedWasteItem;
+
+    this.userCorrectionDescription =
+        description == null || description.isBlank()
+            ? null
+            : description.trim();
 
     this.userCorrectedAt =
         LocalDateTime.now();

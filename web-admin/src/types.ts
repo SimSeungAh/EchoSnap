@@ -188,6 +188,8 @@ export interface AiCorrection {
   aiItem: string;
   aiConfidence: number;
   correctedItem: string;
+  imageUrl?: string;
+  userDescription?: string;
   status: ReviewStatus;
   correctedAt: string;
   memo?: string;

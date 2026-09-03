@@ -26,6 +26,7 @@ public final class AdminAiCorrectionDtos {
       String aiModelVersion,
 
       String correctedWasteItemName,
+      String userDescription,
 
       ImageReviewStatus reviewStatus,
 
@@ -92,6 +93,8 @@ public final class AdminAiCorrectionDtos {
           correctedItem == null
               ? null
               : correctedItem.getName(),
+
+          imageLog.getUserCorrectionDescription(),
 
           imageLog.getReviewStatus(),
 

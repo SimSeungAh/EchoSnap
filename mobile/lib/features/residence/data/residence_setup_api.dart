@@ -308,6 +308,7 @@ class ResidenceSetupApi {
       '다가구주택' => 'MULTI_FAMILY_HOUSE',
       '연립주택' => 'ROW_HOUSE',
       '다세대주택' => 'MULTI_UNIT_HOUSE',
+      '집 앞이나 지정된 지역에 배출해요' => 'UNSPECIFIED',
       _ => throw const ResidenceSetupApiException(
         '지원하지 않는 일반주택 유형입니다.',
       ),

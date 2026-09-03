@@ -55,6 +55,8 @@ class _AiCapturePageState
 
   bool _isCorrecting = false;
 
+  bool _correctionSubmitted = false;
+
   bool _usedServerReanalysis =
   false;
 
@@ -158,6 +160,8 @@ class _AiCapturePageState
 
     _hasRecordedAiResult =
     false;
+
+    _correctionSubmitted = false;
 
     _usedServerReanalysis =
     false;
@@ -627,6 +631,40 @@ class _AiCapturePageState
     }
 
     setState(() {
+      _finalResult = _FinalAiResult(
+        imageLogId: imageLogId,
+        wasteItemId: selected.id,
+        wasteItemName: selected.name,
+        confidence: null,
+        modelVersion: null,
+        userCorrected: true,
+      );
+      _correctionSubmitted = false;
+      _analysisError = null;
+    });
+
+    _showMessage(
+      '${selected.name}(으)로 품목을 변경했어요.',
+    );
+  }
+
+  Future<void> _submitCurrentCorrection() async {
+    final _FinalAiResult? result = _finalResult;
+
+    if (result == null || !result.userCorrected || _isBusy) {
+      return;
+    }
+
+    final String? description =
+    await _askCorrectionDescription(
+      result.wasteItemName,
+    );
+
+    if (!mounted || description == null) {
+      return;
+    }
+
+    setState(() {
       _isCorrecting = true;
     });
 
@@ -636,23 +674,17 @@ class _AiCapturePageState
       await ImageCorrectionApi
           .correct(
         imageLogId:
-        imageLogId,
+        result.imageLogId,
         wasteItemId:
-        selected.id,
+        result.wasteItemId,
+        description:
+        description,
       );
 
       if (!mounted) {
         return;
       }
 
-      /*
-       * 사용자 정정이 완료된 뒤에는
-       * AI confidence/modelVersion을
-       * 수정 품목의 속성처럼 사용하면 안 됩니다.
-       *
-       * 따라서 사용자 선택 결과에는
-       * confidence/modelVersion을 null로 둡니다.
-       */
       setState(() {
         _finalResult =
             _FinalAiResult(
@@ -671,13 +703,13 @@ class _AiCapturePageState
               userCorrected:
               true,
             );
-
+        _correctionSubmitted = true;
         _analysisError = null;
       });
 
       _showMessage(
         '${correction.correctedWasteItemName}(으)로 '
-            '수정했어요.',
+            '관리자에게 정정 요청을 보냈어요.',
       );
     } on ImageCorrectionApiException catch (
     exception
@@ -710,6 +742,17 @@ class _AiCapturePageState
         });
       }
     }
+  }
+
+  Future<String?> _askCorrectionDescription(
+      String wasteItemName,
+      ) async {
+    return showDialog<String>(
+      context: context,
+      builder: (_) => _CorrectionReportDialog(
+        wasteItemName: wasteItemName,
+      ),
+    );
   }
 
   void _openDisposalCheck(
@@ -1036,10 +1079,14 @@ class _AiCapturePageState
                     .userCorrected,
                 isCorrecting:
                 _isCorrecting,
+                correctionSubmitted:
+                _correctionSubmitted,
                 onAccept:
                 _acceptCurrentResult,
                 onCorrect:
                 _correctCurrentResult,
+                onReport:
+                _submitCurrentCorrection,
               ),
             ],
 
@@ -1604,6 +1651,100 @@ class _GuideRow
               height: 1.45,
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CorrectionReportDialog extends StatefulWidget {
+  const _CorrectionReportDialog({
+    required this.wasteItemName,
+  });
+
+  final String wasteItemName;
+
+  @override
+  State<_CorrectionReportDialog> createState() =>
+      _CorrectionReportDialogState();
+}
+
+class _CorrectionReportDialogState
+    extends State<_CorrectionReportDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      _controller.text.trim(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('관리자에게 정정 보내기'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '선택 품목: ${widget.wasteItemName}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '인식에 사용한 사진과 선택한 품목이 함께 전달돼요. '
+                  '관리자가 확인할 수 있도록 물품 특징을 적어주세요.',
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _controller,
+              autofocus: true,
+              minLines: 3,
+              maxLines: 5,
+              maxLength: 500,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _submit(),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '관리자가 확인할 수 있도록 설명을 입력해주세요.';
+                }
+                return null;
+              },
+              decoration: const InputDecoration(
+                labelText: '물품 설명',
+                hintText: '예: 투명한 일회용 플라스틱 컵이에요.',
+                alignLabelWithHint: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_rounded),
+          label: const Text('관리자에게 보내기'),
         ),
       ],
     );

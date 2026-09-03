@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:echosnap/app/app_routes.dart';
 import 'package:echosnap/core/storage/token_storage.dart';
 import 'package:echosnap/core/theme/app_theme.dart';
+import 'package:echosnap/features/auth/data/auth_api.dart';
 import 'package:echosnap/features/home/data/home_schedule_api.dart';
 import 'package:echosnap/features/user/data/current_user_api.dart';
 
@@ -21,6 +22,7 @@ class _HomePageState
   HomeScheduleSnapshot? _schedule;
 
   bool _isLoading = true;
+  bool _isLoggingOut = false;
 
   String? _scheduleError;
 
@@ -123,6 +125,65 @@ class _HomePageState
     );
   }
 
+  Future<void> _confirmLogout() async {
+    if (_isLoggingOut) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('로그아웃할까요?'),
+        content: const Text('다시 이용하려면 로그인이 필요해요.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('로그아웃'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _logout();
+    }
+  }
+
+  Future<void> _logout() async {
+    setState(() {
+      _isLoggingOut = true;
+    });
+
+    final String? refreshToken =
+        await TokenStorage.getRefreshToken();
+
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      try {
+        await AuthApi.logout(
+          refreshToken: refreshToken,
+        );
+      } on AuthApiException {
+        // 서버가 응답하지 않아도 기기의 로그인 정보는 삭제합니다.
+      }
+    }
+
+    await TokenStorage.clearTokens();
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.login,
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -140,15 +201,38 @@ class _HomePageState
               children: [
                 const SizedBox(height: 12),
 
-                const Text(
-                  'EchoSnap',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight:
-                    FontWeight.w800,
-                    color:
-                    AppTheme.primaryColor,
-                  ),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'EchoSnap',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight:
+                          FontWeight.w800,
+                          color:
+                          AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '로그아웃',
+                      onPressed: _isLoggingOut
+                          ? null
+                          : _confirmLogout,
+                      icon: _isLoggingOut
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.logout_rounded,
+                            ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 6),
@@ -317,7 +401,7 @@ class _HomePageState
                         Icons.home_outlined,
                         title: '거주지 설정',
                         description:
-                        '주소와 주거형태',
+                        '배출 장소와 주소',
                         onTap: () async {
                           await Navigator
                               .pushNamed(

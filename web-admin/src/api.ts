@@ -215,6 +215,8 @@ type BackendCorrection = {
   aiWasteItemName?: string | null;
   aiConfidence?: number | null;
   correctedWasteItemName?: string | null;
+  imageUrl?: string | null;
+  userDescription?: string | null;
   reviewStatus: ReviewStatus;
   correctedAt?: string | null;
   reviewMemo?: string | null;
@@ -392,6 +394,31 @@ async function request<T>(
   }
 
   return unwrapData<T>(payload);
+}
+
+async function requestBlob(
+  path: string,
+  retryOnUnauthorized = true,
+): Promise<Blob> {
+  const token = localStorage.getItem(ACCESS);
+  const response = await fetch(`${CONFIG.apiBaseUrl}${path}`, {
+    headers: {
+      Accept: "image/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (response.status === 401 && retryOnUnauthorized) {
+    const refreshed = await reissueTokens();
+    if (refreshed) return requestBlob(path, false);
+    expireSession();
+  }
+
+  if (!response.ok) {
+    throw new HttpError(response.status, `이미지를 불러오지 못했습니다. (${response.status})`);
+  }
+
+  return response.blob();
 }
 
 function pageItems<T>(value: unknown): T[] {
@@ -1972,6 +1999,8 @@ export const adminApi = {
       aiItem: item.aiWasteItemName ?? "판별 실패",
       aiConfidence: item.aiConfidence ?? 0,
       correctedItem: item.correctedWasteItemName ?? "-",
+      imageUrl: item.imageUrl ?? undefined,
+      userDescription: item.userDescription ?? undefined,
       status: item.reviewStatus,
       correctedAt: formatDate(item.correctedAt),
       memo: item.reviewMemo ?? undefined,
@@ -2024,6 +2053,10 @@ export const adminApi = {
     });
 
     return result.items;
+  },
+
+  async correctionImage(path: string): Promise<Blob> {
+    return requestBlob(path);
   },
 
   async reviewCorrection(id: number, approved: boolean, memo = "") {

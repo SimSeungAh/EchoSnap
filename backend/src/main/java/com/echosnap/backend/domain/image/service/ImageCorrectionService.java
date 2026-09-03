@@ -97,7 +97,8 @@ public class ImageCorrectionService {
      * 기존 모바일/서버 AI 결과는 지우지 않습니다.
      */
     imageLog.correctByUser(
-        correctedWasteItem
+        correctedWasteItem,
+        request.description()
     );
 
     /*

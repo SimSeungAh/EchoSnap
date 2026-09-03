@@ -20,12 +20,8 @@ class _ResidenceSetupPageState
   TextEditingController();
 
   final List<String> _residenceTypes = const [
-    '아파트',
-    '오피스텔',
-    '단독주택',
-    '다가구주택',
-    '연립주택',
-    '다세대주택',
+    '건물에서 정한 장소에 배출해요',
+    '집 앞이나 지정된 지역에 배출해요',
   ];
 
   String? _selectedResidenceType;
@@ -44,8 +40,8 @@ class _ResidenceSetupPageState
   bool _hasSearched = false;
 
   bool get _isManagedComplex {
-    return _selectedResidenceType == '아파트' ||
-        _selectedResidenceType == '오피스텔';
+    return _selectedResidenceType ==
+        '건물에서 정한 장소에 배출해요';
   }
 
   bool get _canSave {
@@ -290,7 +286,7 @@ class _ResidenceSetupPageState
                   CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '어디에 거주하고 계신가요?',
+                      '쓰레기를 어떻게 배출하시나요?',
                       style: Theme.of(context)
                           .textTheme
                           .headlineSmall,
@@ -301,8 +297,8 @@ class _ResidenceSetupPageState
                     ),
 
                     Text(
-                      '주거 형태와 주소를 기준으로 '
-                          '맞춤형 배출 일정을 연결해드려요.',
+                      '정확한 건물 종류를 몰라도 괜찮아요. '
+                          '평소 배출하는 방법을 선택해주세요.',
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium,
@@ -313,7 +309,7 @@ class _ResidenceSetupPageState
                     ),
 
                     Text(
-                      '주거 형태',
+                      '배출 방법',
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium,
@@ -323,9 +319,7 @@ class _ResidenceSetupPageState
                       height: 12,
                     ),
 
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Column(
                       children:
                       _residenceTypes.map(
                             (type) {
@@ -333,14 +327,48 @@ class _ResidenceSetupPageState
                               _selectedResidenceType ==
                                   type;
 
-                          return ChoiceChip(
-                            label: Text(type),
-                            selected: isSelected,
-                            onSelected: (_) {
+                          final bool managed =
+                              type == _residenceTypes.first;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: 10,
+                            ),
+                            child: Card(
+                              color: isSelected
+                                  ? Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer
+                                  : null,
+                              child: ListTile(
+                                onTap: () {
                               _selectResidenceType(
                                 type,
                               );
-                            },
+                                },
+                                leading: Icon(
+                                  managed
+                                      ? Icons.apartment_rounded
+                                      : Icons.home_outlined,
+                                ),
+                                title: Text(type),
+                                subtitle: Text(
+                                  managed
+                                      ? '아파트, 관리형 오피스텔 등'
+                                      : '빌라, 단독·다가구주택, 소규모 오피스텔 등',
+                                ),
+                                trailing: Icon(
+                                  isSelected
+                                      ? Icons.check_circle_rounded
+                                      : Icons.radio_button_unchecked_rounded,
+                                  color: isSelected
+                                      ? Theme.of(context)
+                                      .colorScheme
+                                      .primary
+                                      : null,
+                                ),
+                              ),
+                            ),
                           );
                         },
                       ).toList(),
@@ -354,7 +382,7 @@ class _ResidenceSetupPageState
                         null) ...[
                       Text(
                         _isManagedComplex
-                            ? '거주 단지 검색'
+                            ? '건물 검색'
                             : '주소 검색',
                         style: Theme.of(context)
                             .textTheme
@@ -367,8 +395,8 @@ class _ResidenceSetupPageState
 
                       Text(
                         _isManagedComplex
-                            ? '관리자 승인된 공동주택만 검색됩니다.'
-                            : '도로명 또는 지번 주소로 검색해주세요.',
+                            ? '등록된 아파트와 오피스텔을 이름이나 주소로 찾아보세요.'
+                            : '도로명 또는 지번 주소를 검색하면 지역 배출 일정을 연결해요.',
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium,
@@ -498,7 +526,7 @@ class _ResidenceSetupPageState
       if (_apartments.isEmpty) {
         return _EmptyResult(
           message:
-          '승인된 공동주택을 찾지 못했습니다.',
+          '등록된 아파트 또는 오피스텔을 찾지 못했습니다.',
         );
       }
 

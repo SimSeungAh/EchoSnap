@@ -20,6 +20,15 @@ public enum GeneralHousingType {
   MULTI_UNIT_HOUSE(
       "다세대주택",
       PublicHousingGroup.SHARED
+  ),
+
+  /**
+   * 사용자가 법적 주택 유형 대신
+   * 지역 배출 방식을 선택한 경우입니다.
+   */
+  UNSPECIFIED(
+      "세부 유형 미지정",
+      null
   );
 
   private final String displayName;

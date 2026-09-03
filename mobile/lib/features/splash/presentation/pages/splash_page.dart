@@ -64,18 +64,13 @@ class _SplashPageState extends State<SplashPage> {
        * AuthenticatedApiClient가 내부에서
        * Refresh Token 재발급과 원 요청 재시도를 처리합니다.
        */
-      final CurrentUser user =
       await CurrentUserApi.getMe();
 
       if (!mounted) {
         return;
       }
 
-      if (user.onboardingCompleted) {
-        _moveToHome();
-      } else {
-        _moveToResidenceSetup();
-      }
+      _moveToHome();
     } on CurrentUserApiException catch (exception) {
       if (!mounted) {
         return;
@@ -118,14 +113,6 @@ class _SplashPageState extends State<SplashPage> {
     Navigator.pushNamedAndRemoveUntil(
       context,
       AppRoutes.login,
-          (route) => false,
-    );
-  }
-
-  void _moveToResidenceSetup() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.residenceSetup,
           (route) => false,
     );
   }
@@ -179,7 +166,7 @@ class _SplashPageState extends State<SplashPage> {
                 ),
 
                 const Text(
-                  '내 거주지에 맞는 분리배출 도우미',
+                  '헷갈리는 분리배출을 쉽게 확인해요',
                   textAlign:
                   TextAlign.center,
                   style: TextStyle(

@@ -119,6 +119,7 @@ class ImageCorrectionApi {
   static Future<ImageCorrectionResult> correct({
     required int imageLogId,
     required int wasteItemId,
+    required String description,
   }) async {
     if (imageLogId <= 0) {
       throw const ImageCorrectionApiException(
@@ -143,6 +144,10 @@ class ImageCorrectionApi {
         body: <String, dynamic>{
           'wasteItemId':
           wasteItemId,
+          'description':
+          description.trim().isEmpty
+              ? null
+              : description.trim(),
         },
       );
     } on AuthenticatedApiException catch (

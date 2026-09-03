@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:echosnap/app/app_routes.dart';
 import 'package:echosnap/core/storage/token_storage.dart';
 import 'package:echosnap/features/auth/data/auth_api.dart';
+import 'package:echosnap/features/auth/presentation/pages/signup_page.dart';
 import 'package:echosnap/features/user/data/current_user_api.dart';
 
 class LoginPage extends StatefulWidget {
@@ -71,18 +72,13 @@ class _LoginPageState extends State<LoginPage> {
        * AuthenticatedApiClient가 저장된 Access Token을
        * 자동으로 사용하므로 토큰을 직접 전달하지 않습니다.
        */
-      final CurrentUser user =
       await CurrentUserApi.getMe();
 
       if (!mounted) {
         return;
       }
 
-      if (user.onboardingCompleted) {
-        _moveToHome();
-      } else {
-        _moveToResidenceSetup();
-      }
+      _moveToHome();
     } on AuthApiException catch (exception) {
       if (!mounted) {
         return;
@@ -123,14 +119,6 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     }
-  }
-
-  void _moveToResidenceSetup() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.residenceSetup,
-          (route) => false,
-    );
   }
 
   void _moveToHome() {
@@ -366,8 +354,21 @@ class _LoginPageState extends State<LoginPage> {
                       onPressed:
                       _isLoading
                           ? null
-                          : () {
-                        // 회원가입은 후속 단계에서 연결합니다.
+                          : () async {
+                        final bool? signedUp =
+                        await Navigator.of(context).push<bool>(
+                          MaterialPageRoute<bool>(
+                            builder: (_) =>
+                            const SignupPage(),
+                          ),
+                        );
+
+                        if (signedUp == true &&
+                            mounted) {
+                          _showMessage(
+                            '가입이 완료됐어요. 로그인해주세요.',
+                          );
+                        }
                       },
                       child:
                       const Text(

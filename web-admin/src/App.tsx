@@ -3722,6 +3722,9 @@ function AiPage() {
   const [selected, setSelected] = useState<AiCorrection | null>(null);
   const [memo, setMemo] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [correctionImageUrl, setCorrectionImageUrl] = useState("");
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState("");
 
   async function load() {
     setLoading(true);
@@ -3758,6 +3761,42 @@ function AiPage() {
   useEffect(() => {
     void load();
   }, [filter, page]);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+
+    setCorrectionImageUrl("");
+    setImageError("");
+
+    if (!selected?.imageUrl) {
+      setImageLoading(false);
+      return () => undefined;
+    }
+
+    setImageLoading(true);
+    void adminApi
+      .correctionImage(selected.imageUrl)
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setCorrectionImageUrl(objectUrl);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setImageError(
+          err instanceof Error ? err.message : "정정 사진을 불러오지 못했습니다.",
+        );
+      })
+      .finally(() => {
+        if (active) setImageLoading(false);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [selected]);
 
   async function review(ok: boolean) {
     if (!selected || reviewing) return;
@@ -3954,6 +3993,22 @@ function AiPage() {
       >
         {selected && (
           <>
+            <section className="correction-photo-panel">
+              <div className="correction-section-title">
+                <b>사용자가 인식한 사진</b>
+                <span>정정 요청과 함께 저장된 원본 이미지입니다.</span>
+              </div>
+              {imageLoading ? (
+                <div className="correction-photo-state">이미지 불러오는 중...</div>
+              ) : imageError ? (
+                <div className="error-box">{imageError}</div>
+              ) : correctionImageUrl ? (
+                <img src={correctionImageUrl} alt="사용자가 AI 인식에 사용한 물품" />
+              ) : (
+                <div className="correction-photo-state">저장된 이미지가 없습니다.</div>
+              )}
+            </section>
+
             <div className="compare">
               <div>
                 <span>AI 원본</span>
@@ -3970,6 +4025,11 @@ function AiPage() {
                     : `검수 상태: ${selected.status}`}
                 </small>
               </div>
+            </div>
+
+            <div className="correction-description">
+              <span>사용자가 보낸 물품 설명</span>
+              <p>{selected.userDescription || "별도로 입력한 설명이 없습니다."}</p>
             </div>
 
             <label>
