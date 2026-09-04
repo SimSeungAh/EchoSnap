@@ -326,6 +326,11 @@ class AiAnalysisResultCard
                 isCorrecting
                     ? null
                     : onCorrect,
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
                 icon:
                 isCorrecting
                     ? const SizedBox(
@@ -384,6 +389,11 @@ class AiAnalysisResultCard
                 isCorrecting
                     ? null
                     : onCorrect,
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
                 icon:
                 isCorrecting
                     ? const SizedBox(

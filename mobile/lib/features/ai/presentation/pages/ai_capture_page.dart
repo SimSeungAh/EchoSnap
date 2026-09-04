@@ -1087,6 +1087,11 @@ class _AnalysisErrorCard extends StatelessWidget {
             height: 48,
             child: OutlinedButton.icon(
               onPressed: isCorrecting ? null : onRetake,
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
               icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('다시 촬영하기'),
             ),
